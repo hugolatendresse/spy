@@ -972,6 +972,8 @@ void JoinHashTable::Finalize(idx_t chunk_idx_from, idx_t chunk_idx_to, bool para
 }
 
 void JoinHashTable::InitializeFastCache() {
+    // return;
+
 	if (capacity <= TieredHashCache::ACTIVATION_THRESHOLD) {
 		return;
 	}
