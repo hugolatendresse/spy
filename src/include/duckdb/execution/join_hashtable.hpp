@@ -17,7 +17,7 @@
 #include "duckdb/common/types/row/tuple_data_layout.hpp"
 #include "duckdb/common/types/vector.hpp"
 #include "duckdb/execution/aggregate_hashtable.hpp"
-#include "duckdb/execution/fast_hash_cache.hpp"
+#include "duckdb/execution/tiered_hash_cache.hpp"
 #include "duckdb/execution/ht_entry.hpp"
 
 namespace duckdb {
@@ -357,7 +357,7 @@ private:
 	//! An empty tuple that's a "dead end", can be used to stop chains early
 	unsafe_unique_array<data_t> dead_end;
 
-	unique_ptr<FastHashCache> fast_cache;
+	unique_ptr<TieredHashCache> fast_cache;
 
 	//! The byte offset of the join key in each cached row
 	//! Before that key, there is the validity byte coming from data_collection

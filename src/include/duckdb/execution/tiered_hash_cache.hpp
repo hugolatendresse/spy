@@ -9,7 +9,7 @@
 
 namespace duckdb {
 
-//! FastHashCache is a hash table that caches recently
+//! TieredHashCache is a hash table that caches recently
 //! matched probe entries to accelerate repeated hash join lookups.
 //!
 //! Each entry stores: [hash (8 bytes)] [full_row from data_selection]
@@ -17,7 +17,7 @@ namespace duckdb {
 //! completely bypass data_collection access for both key and payload
 //!
 //! Thread safety is simply based on compare-and-swap (check if entry is empty)
-class FastHashCache {
+class TieredHashCache {
 public:
 	//! Memory budget for the cache (sized for L3)
 	static constexpr idx_t DEFAULT_L3_BUDGET = 16ULL * 1024 * 1024;
@@ -31,7 +31,7 @@ public:
 	//!            fast cache since the latter also includes a hash
 	//! row_copy_offset_p how many bytes to skip over in each data_collection row before starting copying into the fast
 	//! cache
-	FastHashCache(idx_t capacity_p, idx_t row_size_p, idx_t row_copy_offset_p = 0)
+	TieredHashCache(idx_t capacity_p, idx_t row_size_p, idx_t row_copy_offset_p = 0)
 	    : capacity(capacity_p), bitmask(capacity_p - 1), row_size(row_size_p), row_copy_offset(row_copy_offset_p),
 	      entry_stride(ComputeEntryStride(row_size_p)) {
 		D_ASSERT(IsPowerOfTwo(capacity)); // Needed for bitmask logic
