@@ -25,6 +25,11 @@ public:
 	//! Only create the fast hash cache if the global hash table has at least that capacity
 	static constexpr idx_t ACTIVATION_THRESHOLD = 10ULL * 1024 * 1024 / sizeof(uint64_t);
 
+	//! Maximum fraction of capacity that may be filled
+	//! Beyond this load factor, Insert silently drops new entries to avoid
+	//! pathological linear-probing chains (the extreme case being an infinite loop).
+	static constexpr double MAX_LOAD_FACTOR = 0.75;
+
 	//! capacity_p is the number of slots to create
 	//! row_size_p is the number of bytes in each row of data_collection.
 	//!            This is smaller than the entry size of each row of our
@@ -33,7 +38,8 @@ public:
 	//! cache
 	TieredHashCache(idx_t capacity_p, idx_t row_size_p, idx_t row_copy_offset_p = 0)
 	    : capacity(capacity_p), bitmask(capacity_p - 1), row_size(row_size_p), row_copy_offset(row_copy_offset_p),
-	      entry_stride(ComputeEntryStride(row_size_p)) {
+	      entry_stride(ComputeEntryStride(row_size_p)),
+	      max_fill(static_cast<idx_t>(capacity_p * MAX_LOAD_FACTOR)) {
 		D_ASSERT(IsPowerOfTwo(capacity)); // Needed for bitmask logic
 		auto total_bytes = capacity * entry_stride;
 		// TODO should we use BPM? Or Arena?
@@ -71,7 +77,7 @@ public:
 			auto slot = probe_hash & bitmask;
 
 			bool found = false;
-			while (true) {
+			for (idx_t probes = 0; probes < MAX_PROBE_DISTANCE; probes++) {
 				auto entry_ptr = GetEntryPtr(slot);
 				const auto stored_hash = LoadHash(entry_ptr);
 				if (stored_hash == 0) {
@@ -103,8 +109,14 @@ public:
 
 	//! Inserts an entry, including the row
 	void Insert(hash_t hash, const_data_ptr_t row_data_ptr) {
+		// Refuse to insert once we've reached the maximum load factor.
+		// Without this guard the unbounded linear-probing loop below can
+		// spin forever when the table is (nearly) full.
+		if (insert_new.load(std::memory_order_relaxed) >= max_fill) {
+			return; // TODO is there a way to communicate that to JoinHashTable to avoid having to try to insert thousands of additional times?
+		}
 		auto slot = hash & bitmask;
-		while (true) {
+		for (idx_t probes = 0; probes < MAX_PROBE_DISTANCE; probes++) {
 			auto entry_ptr = GetEntryPtr(slot);
 			auto hash_ptr = reinterpret_cast<std::atomic<hash_t> *>(entry_ptr);
 
@@ -124,6 +136,8 @@ public:
 
 			slot = (slot + 1) & bitmask; // linear probe is the hashes don't fully match
 		}
+		// Exceeded MAX_PROBE_DISTANCE -> silently drop the entry. It will be a miss later.
+		// TODO should we completely stop populating the THC if we reach here? 
 	}
 
 	idx_t GetCapacity() const {
@@ -186,11 +200,16 @@ private:
 		return entry_ptr + HEADER_SIZE;
 	}
 
+	//! Safety cap for linear probing in ProbeAndMatch.
+	//! If we exceed this many probes we treat the lookup as a cache miss.
+	static constexpr idx_t MAX_PROBE_DISTANCE = 256;
+
 	idx_t capacity;
 	idx_t bitmask;
 	idx_t row_size;
 	idx_t row_copy_offset;
 	idx_t entry_stride;
+	idx_t max_fill;  //! capacity * MAX_LOAD_FACTOR — Insert refuses beyond this
 	unsafe_unique_array<data_t> data;
 };
 
