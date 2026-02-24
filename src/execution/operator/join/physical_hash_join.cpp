@@ -17,36 +17,17 @@
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
-#include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/in_filter.hpp"
-#include "duckdb/planner/filter/null_filter.hpp"
 #include "duckdb/planner/filter/optional_filter.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
-#include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/storage/temporary_memory_manager.hpp"
+#include "duckdb/execution/scoped_hash_join_timer.hpp"
 
-#include <chrono>
 #include <iostream>
 
 namespace duckdb {
-
-class ScopedHashJoinTimer {
-public:
-	explicit ScopedHashJoinTimer(uint64_t &target_p) : target(target_p), start(std::chrono::steady_clock::now()) {
-	}
-
-	~ScopedHashJoinTimer() {
-		auto end = std::chrono::steady_clock::now();
-		auto elapsed_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-		target += NumericCast<uint64_t>(elapsed_ns);
-	}
-
-private:
-	uint64_t &target;
-	std::chrono::steady_clock::time_point start;
-};
 
 static InsertionOrderPreservingMap<string>
 GetHashJoinTimingInfo(const uint64_t build_ns, const uint64_t probe_ns, const uint64_t execute_probe_ns,
@@ -401,7 +382,7 @@ SinkResultType PhysicalHashJoin::Sink(ExecutionContext &context, DataChunk &chun
 
 	// build the HT
 	{
-		ScopedHashJoinTimer build_timer(lstate.build_time_ns);
+		ScopedHashJoinTimer build_timer(&lstate.build_time_ns);
 		lstate.hash_table->Build(lstate.append_state, lstate.join_keys, lstate.payload_chunk);
 	}
 
@@ -1133,7 +1114,7 @@ OperatorResultType PhysicalHashJoin::ExecuteInternal(ExecutionContext &context, 
 		state.initialized = true;
 	}
 	{
-		ScopedHashJoinTimer probe_timer(state.execute_probe_time_ns);
+		ScopedHashJoinTimer probe_timer(&state.execute_probe_time_ns);
 		if (state.scan_structure.is_null) {
 			// probe the HT, start by resolving the join keys for the left chunk
 			state.lhs_join_keys.Reset();
@@ -1155,7 +1136,7 @@ OperatorResultType PhysicalHashJoin::ExecuteInternal(ExecutionContext &context, 
 
 	{
 		// We don't need the fast cache or HT at this point - we just use pointers in state.scan_structure
-		ScopedHashJoinTimer scan_next_timer(state.execute_scan_next_time_ns);
+		ScopedHashJoinTimer scan_next_timer(&state.execute_scan_next_time_ns);
 		state.scan_structure.Next(state.lhs_join_keys, state.lhs_output, chunk);
 	}
 
@@ -1552,8 +1533,7 @@ void HashJoinLocalSourceState::ExternalProbe(HashJoinGlobalSinkState &sink, Hash
 		std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
 		std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
 		std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
-		uint64_t &external_probe_local_ns = this->external_probe_time_ns;
-		ScopedHashJoinTimer probe_timer(external_probe_local_ns);
+		ScopedHashJoinTimer probe_timer(&external_probe_time_ns);
 
 		if (!scan_structure.is_null) {
 			// Still have elements remaining (i.e. we got >STANDARD_VECTOR_SIZE elements in the previous probe)

@@ -8,35 +8,15 @@
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/common/vector_size.hpp"
 #include "duckdb/execution/ht_entry.hpp"
+#include "duckdb/execution/scoped_hash_join_timer.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
-
-#include <chrono>
 
 namespace duckdb {
 using ValidityBytes = JoinHashTable::ValidityBytes;
 using ScanStructure = JoinHashTable::ScanStructure;
 using ProbeSpill = JoinHashTable::ProbeSpill;
 using ProbeSpillLocalState = JoinHashTable::ProbeSpillLocalAppendState;
-
-class ScopedHashJoinTimer {
-public:
-	explicit ScopedHashJoinTimer(uint64_t *target_p) : target(target_p), start(std::chrono::steady_clock::now()) {
-	}
-
-	~ScopedHashJoinTimer() {
-		if (!target) {
-			return;
-		}
-		auto end = std::chrono::steady_clock::now();
-		auto elapsed_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-		*target += static_cast<uint64_t>(elapsed_ns);
-	}
-
-private:
-	uint64_t *target;
-	std::chrono::steady_clock::time_point start;
-};
 
 JoinHashTable::SharedState::SharedState()
     : salt_v(LogicalType::UBIGINT), keys_to_compare_sel(STANDARD_VECTOR_SIZE), keys_no_match_sel(STANDARD_VECTOR_SIZE) {

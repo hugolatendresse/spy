@@ -204,7 +204,7 @@ private:
 	//! If we exceed this many probes we treat the lookup as a cache miss.
 	static constexpr idx_t MAX_PROBE_DISTANCE = 256;
 
-	idx_t capacity;
+	idx_t capacity; // Number of entries the THC can fit
 	idx_t bitmask;
 	idx_t row_size;
 	idx_t row_copy_offset;
