@@ -113,7 +113,7 @@ public:
 		// Without this guard the unbounded linear-probing loop below can
 		// spin forever when the table is (nearly) full.
 		if (insert_new.load(std::memory_order_relaxed) >= max_fill) {
-			return;
+			return; // TODO is there a way to communicate that to JoinHashTable to avoid having to try to insert thousands of additional times?
 		}
 		auto slot = hash & bitmask;
 		for (idx_t probes = 0; probes < MAX_PROBE_DISTANCE; probes++) {
