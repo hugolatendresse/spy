@@ -1,162 +1,162 @@
 0_cold
 CPU Time
-4.577633557999955
+4.938780005000006
 Build Time
-5.963 ms
+7.318 ms
 Probe Time
-2164.788 ms
+2462.099 ms
 Probe Time (ExecuteInternal)
-2164.788 ms
+2462.099 ms
 Probe Time (ExternalProbe)
 0.000 ms
 ProbeForPointers Time
-516.761 ms
+569.379 ms
 Match Time
-937.813 ms
+1099.254 ms
 Scan Structure Next Time (ExecuteInternal)
-757.616 ms
+803.801 ms
 
 1_cold_interleaved
 CPU Time
-21.254391290000076
+4.827546264000014
 Build Time
-11.874 ms
+11.953 ms
 Probe Time
-18223.258 ms
+2460.990 ms
 Probe Time (ExecuteInternal)
-18223.258 ms
+2460.990 ms
 Probe Time (ExternalProbe)
 0.000 ms
 ProbeForPointers Time
-570.582 ms
+2.143 ms
 Match Time
-1586.193 ms
+7.130 ms
 Scan Structure Next Time (ExecuteInternal)
-1240.961 ms
+666.538 ms
 
 1_cold_segmented
 CPU Time
-24.490920931000062
+4.7693992789999955
 Build Time
-16.338 ms
+17.073 ms
 Probe Time
-21634.165 ms
+2198.847 ms
 Probe Time (ExecuteInternal)
-21634.165 ms
+2198.847 ms
 Probe Time (ExternalProbe)
 0.000 ms
 ProbeForPointers Time
-475.310 ms
+2.308 ms
 Match Time
-1471.299 ms
+11.727 ms
 Scan Structure Next Time (ExecuteInternal)
-1012.090 ms
+692.012 ms
 
 5_cold_interleaved
 CPU Time
-14.990723243000062
+5.668014802000052
 Build Time
-32.582 ms
+35.767 ms
 Probe Time
-11196.403 ms
+2978.126 ms
 Probe Time (ExecuteInternal)
-11196.403 ms
+2978.126 ms
 Probe Time (ExternalProbe)
 0.000 ms
 ProbeForPointers Time
-1120.090 ms
+5.150 ms
 Match Time
-2795.123 ms
+12.756 ms
 Scan Structure Next Time (ExecuteInternal)
-1803.886 ms
+855.151 ms
 
 5_cold_segmented
 CPU Time
-44.82669552700052
+4.493620373999988
 Build Time
-39.933 ms
+35.307 ms
 Probe Time
-41353.176 ms
+1988.502 ms
 Probe Time (ExecuteInternal)
-41353.176 ms
+1988.502 ms
 Probe Time (ExternalProbe)
 0.000 ms
 ProbeForPointers Time
-556.604 ms
+2.040 ms
 Match Time
-2289.790 ms
+8.969 ms
 Scan Structure Next Time (ExecuteInternal)
-1362.016 ms
+657.885 ms
 
 10_cold_interleaved
 CPU Time
-11.510376114999938
+6.367550169999997
 Build Time
-80.772 ms
+77.401 ms
 Probe Time
-7654.730 ms
+3476.455 ms
 Probe Time (ExecuteInternal)
-7654.730 ms
+3476.455 ms
 Probe Time (ExternalProbe)
 0.000 ms
 ProbeForPointers Time
-1597.512 ms
+10.350 ms
 Match Time
-2652.418 ms
+17.754 ms
 Scan Structure Next Time (ExecuteInternal)
-1745.668 ms
+844.885 ms
 
 10_cold_segmented
 CPU Time
-27.628055037000014
+4.829457488999921
 Build Time
-82.706 ms
+93.001 ms
 Probe Time
-24562.283 ms
+2095.194 ms
 Probe Time (ExecuteInternal)
-24562.283 ms
+2095.194 ms
 Probe Time (ExternalProbe)
 0.000 ms
 ProbeForPointers Time
-468.507 ms
+1.560 ms
 Match Time
-1274.036 ms
+4.997 ms
 Scan Structure Next Time (ExecuteInternal)
-976.071 ms
+686.274 ms
 
 100_cold_interleaved
 CPU Time
-20.80770871399993
+10.569237945000015
 Build Time
-716.742 ms
+730.618 ms
 Probe Time
-14856.938 ms
+5477.773 ms
 Probe Time (ExecuteInternal)
-14856.938 ms
+5477.773 ms
 Probe Time (ExternalProbe)
 0.000 ms
 ProbeForPointers Time
-3457.877 ms
+9.170 ms
 Match Time
-5838.222 ms
+15.200 ms
 Scan Structure Next Time (ExecuteInternal)
-1969.105 ms
+1096.859 ms
 
 100_cold_segmented
 CPU Time
-31.085407145999977
+6.383794216000014
 Build Time
-774.827 ms
+703.414 ms
 Probe Time
-26245.060 ms
+2070.921 ms
 Probe Time (ExecuteInternal)
-26245.060 ms
+2070.921 ms
 Probe Time (ExternalProbe)
 0.000 ms
 ProbeForPointers Time
-463.270 ms
+1.620 ms
 Match Time
-1089.500 ms
+4.674 ms
 Scan Structure Next Time (ExecuteInternal)
-952.382 ms
+672.433 ms
 
