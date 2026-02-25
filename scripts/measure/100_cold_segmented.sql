@@ -21,7 +21,7 @@ DROP TABLE IF EXISTS a;
 DROP TABLE IF EXISTS b; 
 
 -- Create Fact Table A
--- Hits every hot key 1000 timePT+ 
+-- Hits every hot key 1000 times 
 CREATE TABLE a AS 
 SELECT 
     range AS id, 
