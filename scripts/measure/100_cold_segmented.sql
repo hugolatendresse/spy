@@ -21,7 +21,7 @@ DROP TABLE IF EXISTS a;
 DROP TABLE IF EXISTS b; 
 
 -- Create Fact Table A
--- Hits every hot key 1000 times
+-- Hits every hot key 1000 timePT+ 
 CREATE TABLE a AS 
 SELECT 
     range AS id, 
@@ -48,7 +48,7 @@ ORDER BY hot, random();
 ANALYZE a;
 ANALYZE b;
 
--- EXPLAIN ANALYZE SELECT min(b.valueB1)
+-- EXPLAIN ANALYZE 
 SELECT min(b.valueB1) 
 FROM a 
 JOIN b ON a.keyB1 = b.keyB1;

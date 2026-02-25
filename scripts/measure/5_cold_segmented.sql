@@ -48,7 +48,7 @@ ORDER BY hot, random();
 ANALYZE a;
 ANALYZE b;
 
--- EXPLAIN ANALYZE SELECT min(b.valueB1)
+-- EXPLAIN ANALYZE 
 SELECT min(b.valueB1) 
 FROM a 
 JOIN b ON a.keyB1 = b.keyB1;
