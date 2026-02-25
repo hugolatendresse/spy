@@ -20,7 +20,7 @@ namespace duckdb {
 class TieredHashCache {
 public:
 	//! Memory budget for the cache (sized for L3)
-	static constexpr idx_t DEFAULT_L3_BUDGET = 20ULL * 1024 * 1024;
+	static constexpr idx_t DEFAULT_L3_BUDGET = 22ULL * 1024 * 1024;
 
 	//! Only create the fast hash cache if the global hash table has at least that capacity
 	static constexpr idx_t ACTIVATION_THRESHOLD = 10ULL * 1024 * 1024 / sizeof(uint64_t);
@@ -28,7 +28,7 @@ public:
 	//! Maximum fraction of capacity that may be filled
 	//! Beyond this load factor, Insert silently drops new entries to avoid
 	//! pathological linear-probing chains (the extreme case being an infinite loop).
-	static constexpr double MAX_LOAD_FACTOR = 1.00;
+	static constexpr double MAX_LOAD_FACTOR = 0.9;
 
 	//! capacity_p is the number of slots to create
 	//! row_size_p is the number of bytes in each row of data_collection.
@@ -202,7 +202,7 @@ private:
 
 	//! Safety cap for linear probing in ProbeAndMatch.
 	//! If we exceed this many probes we treat the lookup as a cache miss.
-	static constexpr idx_t MAX_PROBE_DISTANCE = 256;
+	static constexpr idx_t MAX_PROBE_DISTANCE = 10;
 
 	idx_t capacity; // Number of entries the THC can fit
 	idx_t bitmask;
