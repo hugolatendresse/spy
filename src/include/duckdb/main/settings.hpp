@@ -566,6 +566,16 @@ struct RptForwardOnlySetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
+struct DisableTieredHashCacheSetting {
+	using RETURN_TYPE = bool;
+	static constexpr const char *Name = "disable_tiered_hash_cache";
+	static constexpr const char *Description = "When enabled, skip initializing the tiered hash cache";
+	static constexpr const char *InputType = "BOOLEAN";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
 struct EnableHTTPMetadataCacheSetting {
 	using RETURN_TYPE = bool;
 	static constexpr const char *Name = "enable_http_metadata_cache";

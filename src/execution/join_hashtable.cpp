@@ -9,6 +9,7 @@
 #include "duckdb/common/vector_size.hpp"
 #include "duckdb/execution/ht_entry.hpp"
 #include "duckdb/execution/scoped_hash_join_timer.hpp"
+#include "duckdb/main/client_config.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 
@@ -1053,7 +1054,11 @@ void JoinHashTable::Finalize(idx_t chunk_idx_from, idx_t chunk_idx_to, bool para
 
 void JoinHashTable::InitializeTieredHashCache() {
 	// return; // Uncommenting this skips the use of THC. Performance becomes the same as the original
-	
+	auto &config = ClientConfig::GetConfig(context);
+	if (config.disable_tiered_hash_cache) {
+		return;
+	}
+
 	if (capacity <= TieredHashCache::ACTIVATION_THRESHOLD) {
 		return;
 	}
