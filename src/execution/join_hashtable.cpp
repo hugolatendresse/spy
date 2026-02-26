@@ -1059,6 +1059,7 @@ void JoinHashTable::InitializeFastCache() {
 	}
 
 	// Only activate for all-constant (fixed-size) equality key types
+	// TODO support non-fixed sized merge keys in THC
 	for (const auto &type : equality_types) {
 		if (type.InternalType() == PhysicalType::VARCHAR || type.InternalType() == PhysicalType::STRUCT ||
 		    type.InternalType() == PhysicalType::LIST) {
