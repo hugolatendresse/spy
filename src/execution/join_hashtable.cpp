@@ -394,7 +394,7 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 
 	// WARMUP PHASE ------------------------------------------------
 
-	if (state.fast_cache_phase == FastCachePhase::WARMUP) {
+	if (state.fast_cache_phase == TieredHashCachePhase::WARMUP) {
 		const idx_t input_count = count; // save before GetRowPointersInternal modifies it
 
 		// Save original hashes before GetRowPointersInternal modifies it
@@ -447,7 +447,7 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 			        (unsigned long)fast_cache->insert_new.load(), (unsigned long)fast_cache->insert_dup.load());
 			state.warmup_entries.clear();
 			state.warmup_entries.shrink_to_fit();
-			state.fast_cache_phase = FastCachePhase::READY;
+			state.fast_cache_phase = TieredHashCachePhase::READY;
 		}
 		return;
 	}
@@ -1051,7 +1051,7 @@ void JoinHashTable::Finalize(idx_t chunk_idx_from, idx_t chunk_idx_to, bool para
 	} while (iterator.Next());
 }
 
-void JoinHashTable::InitializeFastCache() {
+void JoinHashTable::InitializeTieredHashCache() {
 	// return; // Uncommenting this skips the use of THC // TODO make sure performance is the same as original
 
 	if (capacity <= TieredHashCache::ACTIVATION_THRESHOLD) {
@@ -1082,7 +1082,7 @@ void JoinHashTable::InitializeFastCache() {
 	fast_cache = make_uniq<TieredHashCache>(cache_capacity, data_collection_row_size, row_copy_offset);
 
 	fprintf(stderr,
-	        "[InitFastCache] row_size=%lu (tuple_size=%lu, pointer_offset=%lu), entry_stride=%lu, capacity=%lu, "
+	        "[InitTHC] row_size=%lu (tuple_size=%lu, pointer_offset=%lu), entry_stride=%lu, capacity=%lu, "
 	        "total=%.1f MiB\n",
 	        (unsigned long)data_collection_row_size, (unsigned long)tuple_size, (unsigned long)pointer_offset,
 	        (unsigned long)((sizeof(hash_t) + data_collection_row_size + 7) & ~idx_t(7)), (unsigned long)cache_capacity,

@@ -635,7 +635,7 @@ public:
 		auto &ht = *sink.hash_table;
 		PrintJoinHashTableFinalizeStats(ht);
 		sink.hash_table->GetDataCollection().VerifyEverythingPinned();
-		sink.hash_table->InitializeFastCache();
+		sink.hash_table->InitializeTieredHashCache();
 		sink.hash_table->finalized = true;
 	}
 

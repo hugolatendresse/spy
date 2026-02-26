@@ -147,7 +147,7 @@ public:
 		SelectionVector keys_no_match_sel;
 	};
 
-	enum class FastCachePhase : uint8_t { WARMUP, READY };
+	enum class TieredHashCachePhase : uint8_t { WARMUP, READY };
 
 	//! Number of probe-side rows each thread processed before populating the fast hash cache.
 	//! TODO 200k rows seem to work better than 100k? Understand what's going on
@@ -177,7 +177,7 @@ public:
 		SelectionVector cache_miss_sel;
 
 		// Fast cache warmup state (per thread)
-		FastCachePhase fast_cache_phase = FastCachePhase::WARMUP;
+		TieredHashCachePhase fast_cache_phase = TieredHashCachePhase::WARMUP;
 		idx_t warmup_rows_probed = 0;
 
 		vector<WarmupEntry> warmup_entries;
@@ -217,7 +217,7 @@ public:
 	void Finalize(idx_t chunk_idx_from, idx_t chunk_idx_to, bool parallel);
 	//! Create the (shared) fast hash cache if the table is large enough.
 	//! Must be called after the Finalize tasks that create the global HT
-	void InitializeFastCache();
+	void InitializeTieredHashCache();
 	//! Probe the HT with the given input chunk, resulting in the given result
 	void Probe(ScanStructure &scan_structure, DataChunk &keys, TupleDataChunkState &key_state, ProbeState &probe_state,
 	           optional_ptr<Vector> precomputed_hashes = nullptr);
