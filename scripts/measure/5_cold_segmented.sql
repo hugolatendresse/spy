@@ -34,18 +34,21 @@ SELECT 999_999_999 AS id, 999_999_999 as keyB1; -- Have large min/max filter and
 -- Since the range is > 1M wide, perfect hashing is disabled
 CREATE TABLE b AS
 WITH base_data AS (
-    SELECT range AS keyB1 FROM range(0, 2_000_000)
-    UNION ALL
-    SELECT 999_999_999 as keyB1 -- Have large min/max filter and disable perfect hashing
+    SELECT range AS keyB1,
+           range as valueB1
+     FROM range(0, 2_000_000)    
+ UNION ALL
+    SELECT 999_999_999 as keyB1, -- Have large min/max filter and disable perfect hashing
+999_999_999 as valueB1
 )
-SELECT keyB1, (keyB1 < 400_000) as hot FROM base_data
+SELECT keyB1, valueB1, (keyB1 < 400_000) as hot FROM base_data
 ORDER BY hot, random();
 
 -- Update statistics for the cost-based optimizer
 ANALYZE a;
 ANALYZE b;
 
--- EXPLAIN ANALYZE SELECT count(*) 
-SELECT min(b.keyB1) 
+-- EXPLAIN ANALYZE 
+SELECT min(b.valueB1) 
 FROM a 
 JOIN b ON a.keyB1 = b.keyB1;

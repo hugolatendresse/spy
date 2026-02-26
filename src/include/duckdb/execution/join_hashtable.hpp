@@ -17,7 +17,7 @@
 #include "duckdb/common/types/row/tuple_data_layout.hpp"
 #include "duckdb/common/types/vector.hpp"
 #include "duckdb/execution/aggregate_hashtable.hpp"
-#include "duckdb/execution/fast_hash_cache.hpp"
+#include "duckdb/execution/tiered_hash_cache.hpp"
 #include "duckdb/execution/ht_entry.hpp"
 
 namespace duckdb {
@@ -361,7 +361,7 @@ private:
 	//! Created during Finalize when the hash table is large enough.
 	//! During warmup, entries are inserted via idempotent Insert() calls.
 	//! After warmup, the cache is read-only (no more writes).
-	unique_ptr<FastHashCache> fast_cache;
+	unique_ptr<TieredHashCache> fast_cache;
 
 	//! The byte offset of the join key in each cached row
 	//! Before that key, there is the validity byte coming from data_collection

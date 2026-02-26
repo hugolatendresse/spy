@@ -22,7 +22,7 @@ CREATE TABLE b AS SELECT range AS barn FROM range(0,4_000_000,1_000_000);
 ANALYZE a;
 ANALYZE b;
 
--- EXPLAIN ANALYZE SELECT count(*) 
+-- EXPLAIN ANALYZE SELECT min(b.valueB1)
 SELECT min(b.barn) 
 FROM a 
 JOIN b ON a.barn = b.barn 

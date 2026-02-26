@@ -16,7 +16,6 @@ SET threads = 4;
 SET disabled_optimizers = 'compressed_materialization';
 
 
-
 -- Clean up
 DROP TABLE IF EXISTS a; 
 DROP TABLE IF EXISTS b; 
@@ -35,9 +34,15 @@ SELECT 999_999_999 AS id, 999_999_999 as keyB1; -- Have large min/max filter and
 -- 400k hot entries in hashtable (1 in every 100), 40M total 
 CREATE TABLE b AS
 WITH base_data AS (
-    SELECT range AS keyB1 FROM range(0, 40_000_000)
-    UNION ALL
-    SELECT 999_999_999 as keyB1 -- Have large min/max filter and disable perfect hashing
+    SELECT range AS keyB1,
+           range as valueB1,
+           FALSE as hot
+    FROM range(0, 40_000_000)    
+ UNION ALL
+    SELECT 999_999_999 as keyB1, -- Have large min/max filter and disable perfect hashing
+           999_999_999 as valueB1,
+           FALSE as hot
+
 )
 SELECT * FROM base_data
 ORDER BY random();
@@ -46,7 +51,7 @@ ORDER BY random();
 ANALYZE a;
 ANALYZE b;
 
--- EXPLAIN ANALYZE SELECT count(*) 
-SELECT min(b.keyB1) 
+-- EXPLAIN ANALYZE 
+SELECT min(b.valueB1) 
 FROM a 
 JOIN b ON a.keyB1 = b.keyB1;

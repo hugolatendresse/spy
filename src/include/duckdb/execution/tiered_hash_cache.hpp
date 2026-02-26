@@ -9,7 +9,7 @@
 
 namespace duckdb {
 
-//! FastHashCache is a hash table that caches recently
+//! TieredHashCache is a hash table that caches recently
 //! matched probe entries to accelerate repeated hash join lookups.
 //!
 //! Each entry stores: [hash (8 bytes)] [full_row from data_selection]
@@ -17,13 +17,18 @@ namespace duckdb {
 //! completely bypass data_collection access for both key and payload
 //!
 //! Thread safety is simply based on compare-and-swap (check if entry is empty)
-class FastHashCache {
+class TieredHashCache {
 public:
 	//! Memory budget for the cache (sized for L3)
-	static constexpr idx_t DEFAULT_L3_BUDGET = 16ULL * 1024 * 1024;
+	static constexpr idx_t DEFAULT_L3_BUDGET = 22ULL * 1024 * 1024;
 
 	//! Only create the fast hash cache if the global hash table has at least that capacity
 	static constexpr idx_t ACTIVATION_THRESHOLD = 10ULL * 1024 * 1024 / sizeof(uint64_t);
+
+	//! Maximum fraction of capacity that may be filled
+	//! Beyond this load factor, Insert silently drops new entries to avoid
+	//! pathological linear-probing chains (the extreme case being an infinite loop).
+	static constexpr double MAX_LOAD_FACTOR = 0.9;
 
 	//! capacity_p is the number of slots to create
 	//! row_size_p is the number of bytes in each row of data_collection.
@@ -31,9 +36,10 @@ public:
 	//!            fast cache since the latter also includes a hash
 	//! row_copy_offset_p how many bytes to skip over in each data_collection row before starting copying into the fast
 	//! cache
-	FastHashCache(idx_t capacity_p, idx_t row_size_p, idx_t row_copy_offset_p = 0)
+	TieredHashCache(idx_t capacity_p, idx_t row_size_p, idx_t row_copy_offset_p = 0)
 	    : capacity(capacity_p), bitmask(capacity_p - 1), row_size(row_size_p), row_copy_offset(row_copy_offset_p),
-	      entry_stride(ComputeEntryStride(row_size_p)) {
+	      entry_stride(ComputeEntryStride(row_size_p)),
+	      max_fill(static_cast<idx_t>(capacity_p * MAX_LOAD_FACTOR)) {
 		D_ASSERT(IsPowerOfTwo(capacity)); // Needed for bitmask logic
 		auto total_bytes = capacity * entry_stride;
 		// TODO should we use BPM? Or Arena?
@@ -121,7 +127,7 @@ public:
 			auto slot = probe_hash & bitmask;
 
 			bool found = false;
-			while (true) {
+			for (idx_t probes = 0; probes < MAX_PROBE_DISTANCE; probes++) {
 				auto entry_ptr = GetEntryPtr(slot);
 				const auto stored_hash = LoadHash(entry_ptr);
 				if (stored_hash == 0) {
@@ -153,8 +159,14 @@ public:
 
 	//! Inserts an entry, including the row
 	void Insert(hash_t hash, const_data_ptr_t row_data_ptr) {
+		// Refuse to insert once we've reached the maximum load factor.
+		// Without this guard the unbounded linear-probing loop below can
+		// spin forever when the table is (nearly) full.
+		if (insert_new.load(std::memory_order_relaxed) >= max_fill) {
+			return; // TODO is there a way to communicate that to JoinHashTable to avoid having to try to insert thousands of additional times?
+		}
 		auto slot = hash & bitmask;
-		while (true) {
+		for (idx_t probes = 0; probes < MAX_PROBE_DISTANCE; probes++) {
 			auto entry_ptr = GetEntryPtr(slot);
 			auto hash_ptr = reinterpret_cast<std::atomic<hash_t> *>(entry_ptr);
 
@@ -173,6 +185,8 @@ public:
 
 			slot = (slot + 1) & bitmask; // linear probe is the hashes don't fully match
 		}
+		// Exceeded MAX_PROBE_DISTANCE -> silently drop the entry. It will be a miss later.
+		// TODO should we completely stop populating the THC if we reach here? 
 	}
 
 	idx_t GetCapacity() const {
@@ -235,11 +249,16 @@ private:
 		return entry_ptr + HEADER_SIZE;
 	}
 
-	idx_t capacity;
+	//! Safety cap for linear probing in ProbeAndMatch.
+	//! If we exceed this many probes we treat the lookup as a cache miss.
+	static constexpr idx_t MAX_PROBE_DISTANCE = 10;
+
+	idx_t capacity; // Number of entries the THC can fit
 	idx_t bitmask;
 	idx_t row_size;
 	idx_t row_copy_offset;
 	idx_t entry_stride;
+	idx_t max_fill;  //! capacity * MAX_LOAD_FACTOR — Insert refuses beyond this
 	unsafe_unique_array<data_t> data;
 };
 

@@ -22,7 +22,7 @@ ANALYZE a;
 ANALYZE b;
 ANALYZE c;
 
--- EXPLAIN ANALYZE SELECT count(*) 
+-- EXPLAIN ANALYZE SELECT min(b.valueB1)
 SELECT count(*) 
 FROM a 
 JOIN b ON a.barn = b.barn 
