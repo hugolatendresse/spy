@@ -10,6 +10,7 @@ RUN_TPCH=1
 RUN_TPCDS=1
 DB_BASE_PATH=""
 RPT_FORWARD_ONLY=0
+DISABLE_TIERED_HASH_CACHE=0
 TPCH_QUERY=""
 
 usage() {
@@ -26,6 +27,7 @@ Options:
 	--tpcds-only            Run only TPC-DS (default: run both TPC-H and TPC-DS)
 	--tpch-query <number>   Run only a specific TPC-H query (1-22, implies --tpch-only)
 	--rpt-forward-only      Disable the RPT backward pass (forward pass only)
+	--disable-thc           Disable the tiered hash cache
 	-h, --help              Show this help
 
 Examples:
@@ -34,6 +36,7 @@ Examples:
 	scripts/run_TPC_bench.sh --tpch-only --sf 5
 	scripts/run_TPC_bench.sh --tpch-query 5 --sf 500
 	scripts/run_TPC_bench.sh --tpcds-only --sf 10
+	scripts/run_TPC_bench.sh --disable-thc --tpch-only --sf 10
 USAGE
 }
 
@@ -82,6 +85,10 @@ while [[ $# -gt 0 ]]; do
 			RPT_FORWARD_ONLY=1
 			shift
 			;;
+		--disable-thc)
+			DISABLE_TIERED_HASH_CACHE=1
+			shift
+			;;
 		-h|--help)
 			usage
 			exit 0
@@ -114,6 +121,9 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 EXTRA_SET=""
 if [[ $RPT_FORWARD_ONLY -eq 1 ]]; then
 	EXTRA_SET="SET rpt_forward_only = true;"
+fi
+if [[ $DISABLE_TIERED_HASH_CACHE -eq 1 ]]; then
+	EXTRA_SET="${EXTRA_SET} SET disable_tiered_hash_cache = true;"
 fi
 
 TPCH_CSV_PATH="$OUT_DIR/tpch_runtimes_sf${SF}_${TIMESTAMP}.csv"
