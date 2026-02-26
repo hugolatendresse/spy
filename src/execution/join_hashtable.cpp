@@ -70,7 +70,7 @@ JoinHashTable::JoinHashTable(ClientContext &context_p, const vector<JoinConditio
 	// at least one equality is necessary
 	D_ASSERT(!equality_types.empty());
 
-	// Types for the layoutPhysicalHashJoin::InitializeHashTable
+	// Types for the layout
 	auto layout = make_shared_ptr<TupleDataLayout>();
 	vector<LogicalType> layout_types(condition_types);
 	layout_types.insert(layout_types.end(), build_types.begin(), build_types.end());
