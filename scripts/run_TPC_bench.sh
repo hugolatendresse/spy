@@ -235,13 +235,22 @@ if [[ $RUN_TPCH -eq 1 ]]; then
 	for Q in $QUERY_RANGE; do
 		echo "Running TPC-H query ${Q}..."
 		TIME_FILE=$(mktemp)
+		ERROR_FILE=$(mktemp)
 		if /usr/bin/time -f "%e" -o "$TIME_FILE" \
-			"$DUCKDB_BIN" "$TPCH_DB_PATH" -c "${EXTRA_SET} LOAD tpch; PRAGMA tpch(${Q});" > /dev/null 2>&1; then
+			"$DUCKDB_BIN" "$TPCH_DB_PATH" -c "${EXTRA_SET} LOAD tpch; PRAGMA tpch(${Q});" > /dev/null 2>"$ERROR_FILE"; then
 			RUNTIME=$(cat "$TIME_FILE")
 		else
-			RUNTIME="error"
+			EXIT_CODE=$?
+			echo "Error: TPC-H query ${Q} failed with exit code ${EXIT_CODE}" >&2
+			echo "Error output:" >&2
+			cat "$ERROR_FILE" >&2
+			ERROR_LOG="$OUT_DIR/tpch_q${Q}_error_${TIMESTAMP}.log"
+			cp "$ERROR_FILE" "$ERROR_LOG"
+			echo "Full error saved to: ${ERROR_LOG}" >&2
+			rm -f "$TIME_FILE" "$ERROR_FILE"
+			exit 1
 		fi
-		rm -f "$TIME_FILE"
+		rm -f "$TIME_FILE" "$ERROR_FILE"
 		printf "Q%02d,%s\n" "$Q" "$RUNTIME" >> "$TPCH_CSV_PATH"
 		if [[ "$RUNTIME" != "error" ]]; then
 			TPCH_TOTAL=$(awk -v t="$TPCH_TOTAL" -v r="$RUNTIME" 'BEGIN{printf "%.6f", t + r}')
@@ -274,13 +283,22 @@ if [[ $RUN_TPCDS -eq 1 ]]; then
 	for Q in $(seq 1 99); do
 		echo "Running TPC-DS query ${Q}..."
 		TIME_FILE=$(mktemp)
+		ERROR_FILE=$(mktemp)
 		if /usr/bin/time -f "%e" -o "$TIME_FILE" \
-			"$DUCKDB_BIN" "$TPCDS_DB_PATH" -c "${EXTRA_SET} LOAD tpcds; PRAGMA tpcds(${Q});" > /dev/null 2>&1; then
+			"$DUCKDB_BIN" "$TPCDS_DB_PATH" -c "${EXTRA_SET} LOAD tpcds; PRAGMA tpcds(${Q});" > /dev/null 2>"$ERROR_FILE"; then
 			RUNTIME=$(cat "$TIME_FILE")
 		else
-			RUNTIME="error"
+			EXIT_CODE=$?
+			echo "Error: TPC-DS query ${Q} failed with exit code ${EXIT_CODE}" >&2
+			echo "Error output:" >&2
+			cat "$ERROR_FILE" >&2
+			ERROR_LOG="$OUT_DIR/tpcds_q${Q}_error_${TIMESTAMP}.log"
+			cp "$ERROR_FILE" "$ERROR_LOG"
+			echo "Full error saved to: ${ERROR_LOG}" >&2
+			rm -f "$TIME_FILE" "$ERROR_FILE"
+			exit 1
 		fi
-		rm -f "$TIME_FILE"
+		rm -f "$TIME_FILE" "$ERROR_FILE"
 		printf "Q%02d,%s\n" "$Q" "$RUNTIME" >> "$TPCDS_CSV_PATH"
 		if [[ "$RUNTIME" != "error" ]]; then
 			TPCDS_TOTAL=$(awk -v t="$TPCDS_TOTAL" -v r="$RUNTIME" 'BEGIN{printf "%.6f", t + r}')
