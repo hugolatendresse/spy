@@ -72,6 +72,8 @@ struct ClientConfig {
 	bool verify_serializer = false;
 	//! Enable the running of optimizers
 	bool enable_optimizer = true;
+	//! When true, only the forward pass of RPT+ is executed (backward pass is skipped)
+	bool rpt_forward_only = false;
 	//! Enable caching operators
 	bool enable_caching_operators = true;
 	//! Force parallelism of small tables, used for testing

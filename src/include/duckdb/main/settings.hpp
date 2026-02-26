@@ -556,6 +556,16 @@ struct EnableHTTPLoggingSetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
+struct RptForwardOnlySetting {
+	using RETURN_TYPE = bool;
+	static constexpr const char *Name = "rpt_forward_only";
+	static constexpr const char *Description = "When enabled, only the forward pass of RPT+ is executed (backward pass is skipped)";
+	static constexpr const char *InputType = "BOOLEAN";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
 struct EnableHTTPMetadataCacheSetting {
 	using RETURN_TYPE = bool;
 	static constexpr const char *Name = "enable_http_metadata_cache";
