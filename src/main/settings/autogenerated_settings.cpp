@@ -57,7 +57,7 @@ Value AllocatorBackgroundThreadsSetting::GetSetting(const ClientContext &context
 }
 
 //===----------------------------------------------------------------------===//
-// Allow Community Extensions
+
 //===----------------------------------------------------------------------===//
 void AllowCommunityExtensionsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
 	if (!OnGlobalSet(db, config, input)) {
@@ -530,6 +530,23 @@ void RptForwardOnlySetting::ResetLocal(ClientContext &context) {
 Value RptForwardOnlySetting::GetSetting(const ClientContext &context) {
 	auto &config = ClientConfig::GetConfig(context);
 	return Value::BOOLEAN(config.rpt_forward_only);
+}
+
+//===----------------------------------------------------------------------===//
+// Disable Tiered Hash Cache
+//===----------------------------------------------------------------------===//
+void DisableTieredHashCacheSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.disable_tiered_hash_cache = input.GetValue<bool>();
+}
+
+void DisableTieredHashCacheSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).disable_tiered_hash_cache = ClientConfig().disable_tiered_hash_cache;
+}
+
+Value DisableTieredHashCacheSetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::BOOLEAN(config.disable_tiered_hash_cache);
 }
 
 //===----------------------------------------------------------------------===//
