@@ -9,6 +9,7 @@ OUT_DIR="./tpch_results"
 RUN_TPCH=1
 RUN_TPCDS=1
 DB_BASE_PATH=""
+RPT_FORWARD_ONLY=0
 
 usage() {
 	cat <<'USAGE'
@@ -22,6 +23,7 @@ Options:
 	--out-dir <dir>         Output directory for results (default: ./tpch_results)
 	--tpch-only             Run only TPC-H (default: run both TPC-H and TPC-DS)
 	--tpcds-only            Run only TPC-DS (default: run both TPC-H and TPC-DS)
+	--rpt-forward-only      Disable the RPT backward pass (forward pass only)
 	-h, --help              Show this help
 
 Examples:
@@ -67,6 +69,10 @@ while [[ $# -gt 0 ]]; do
 			RUN_TPCDS=1
 			shift
 			;;
+		--rpt-forward-only)
+			RPT_FORWARD_ONLY=1
+			shift
+			;;
 		-h|--help)
 			usage
 			exit 0
@@ -94,6 +100,12 @@ fi
 
 mkdir -p "$OUT_DIR"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+# Build optional SET prefix
+EXTRA_SET=""
+if [[ $RPT_FORWARD_ONLY -eq 1 ]]; then
+	EXTRA_SET="SET rpt_forward_only = true;"
+fi
 
 TPCH_CSV_PATH="$OUT_DIR/tpch_runtimes_sf${SF}_${TIMESTAMP}.csv"
 TPCH_TXT_PATH="$OUT_DIR/tpch_runtimes_sf${SF}_${TIMESTAMP}.txt"
@@ -194,7 +206,7 @@ if [[ $RUN_TPCH -eq 1 ]]; then
 		echo "Running TPC-H query ${Q}..."
 		TIME_FILE=$(mktemp)
 		if /usr/bin/time -f "%e" -o "$TIME_FILE" \
-			"$DUCKDB_BIN" "$TPCH_DB_PATH" -c "LOAD tpch; PRAGMA tpch(${Q});" > /dev/null 2>&1; then
+			"$DUCKDB_BIN" "$TPCH_DB_PATH" -c "${EXTRA_SET} LOAD tpch; PRAGMA tpch(${Q});" > /dev/null 2>&1; then
 			RUNTIME=$(cat "$TIME_FILE")
 		else
 			RUNTIME="error"
@@ -233,7 +245,7 @@ if [[ $RUN_TPCDS -eq 1 ]]; then
 		echo "Running TPC-DS query ${Q}..."
 		TIME_FILE=$(mktemp)
 		if /usr/bin/time -f "%e" -o "$TIME_FILE" \
-			"$DUCKDB_BIN" "$TPCDS_DB_PATH" -c "LOAD tpcds; PRAGMA tpcds(${Q});" > /dev/null 2>&1; then
+			"$DUCKDB_BIN" "$TPCDS_DB_PATH" -c "${EXTRA_SET} LOAD tpcds; PRAGMA tpcds(${Q});" > /dev/null 2>&1; then
 			RUNTIME=$(cat "$TIME_FILE")
 		else
 			RUNTIME="error"
