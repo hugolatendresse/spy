@@ -1052,8 +1052,8 @@ void JoinHashTable::Finalize(idx_t chunk_idx_from, idx_t chunk_idx_to, bool para
 }
 
 void JoinHashTable::InitializeTieredHashCache() {
-	// return; // Uncommenting this skips the use of THC // TODO make sure performance is the same as original
-
+	// return; // Uncommenting this skips the use of THC. Performance becomes the same as the original
+	
 	if (capacity <= TieredHashCache::ACTIVATION_THRESHOLD) {
 		return;
 	}

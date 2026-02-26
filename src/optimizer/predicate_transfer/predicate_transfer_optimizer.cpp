@@ -10,6 +10,7 @@
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
+#include "duckdb/main/client_config.hpp"
 
 namespace duckdb {
 
@@ -33,9 +34,13 @@ unique_ptr<LogicalOperator> PredicateTransferOptimizer::Optimize(unique_ptr<Logi
 
 	// **Backward pass**: Process nodes in original order (from first to last)
 	// - Similar to the forward pass, but for backward edges
-	for (auto *current_node : ordered_nodes) {
-		for (auto &BF_plan : CreateBloomFilterPlan(*current_node, true)) {
-			graph_manager.AddFilterPlan(BF_plan.first, BF_plan.second, true);
+	// - Skipped when rpt_forward_only is set
+	auto &config = ClientConfig::GetConfig(graph_manager.context);
+	if (!config.rpt_forward_only) {
+		for (auto *current_node : ordered_nodes) {
+			for (auto &BF_plan : CreateBloomFilterPlan(*current_node, true)) {
+				graph_manager.AddFilterPlan(BF_plan.first, BF_plan.second, true);
+			}
 		}
 	}
 

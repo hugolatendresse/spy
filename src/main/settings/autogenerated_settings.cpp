@@ -516,6 +516,23 @@ Value EnableHTTPLoggingSetting::GetSetting(const ClientContext &context) {
 }
 
 //===----------------------------------------------------------------------===//
+// RPT Forward Only
+//===----------------------------------------------------------------------===//
+void RptForwardOnlySetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.rpt_forward_only = input.GetValue<bool>();
+}
+
+void RptForwardOnlySetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).rpt_forward_only = ClientConfig().rpt_forward_only;
+}
+
+Value RptForwardOnlySetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::BOOLEAN(config.rpt_forward_only);
+}
+
+//===----------------------------------------------------------------------===//
 // Enable H T T P Metadata Cache
 //===----------------------------------------------------------------------===//
 void EnableHTTPMetadataCacheSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
