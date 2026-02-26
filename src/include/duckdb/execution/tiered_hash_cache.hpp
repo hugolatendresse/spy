@@ -28,7 +28,7 @@ public:
 	//! Memory budget for the cache (sized for L3)
 	static constexpr idx_t DEFAULT_L3_BUDGET = 22ULL * 1024 * 1024;
 
-	//! Only create the fast hash cache if the global hash table has at least that capacity
+	//! Only create the THC if the global hash table has at least that capacity
 	static constexpr idx_t ACTIVATION_THRESHOLD = 10ULL * 1024 * 1024 / sizeof(uint64_t);
 
 	//! Maximum fraction of capacity that may be filled
@@ -237,7 +237,7 @@ private:
 		return (HEADER_SIZE + row_size + 7) & ~idx_t(7);
 	}
 
-	// Get a pointer to the `slot`th entry in the fast cache
+	// Get a pointer to the `slot`th entry in the THC
 	inline data_ptr_t GetEntryPtr(idx_t slot) const {
 		return data.get() + slot * entry_stride;
 	}
