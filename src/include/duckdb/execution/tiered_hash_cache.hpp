@@ -33,7 +33,7 @@ public:
 	//! capacity_p is the number of slots to create
 	//! row_size_p is the number of bytes in each row of data_collection.
 	//!            This is smaller than the entry size of each row of our
-	//!            fast cache since the latter also includes a hash
+	//!            THC since the latter also includes a hash
 	//! row_copy_offset_p how many bytes to skip over in each data_collection row before starting copying into the fast
 	//! cache
 	TieredHashCache(idx_t capacity_p, idx_t row_size_p, idx_t row_copy_offset_p = 0)

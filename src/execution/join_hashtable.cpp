@@ -563,7 +563,7 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 	// Everything else using ProbeByHash below
 	// ProbyByHash finds a cache entry with a matching hash (no key check)
 	// RowMatcher.Match checks actual keys equality for that THC candidates
-	// This pattern allows us to avoid using RowMatcher for simple keys and 
+	// This pattern allows us to avoid using RowMatcher for simple keys and
 	// prevents the need of implementing complex row matching logic in the THC.
 	if (!used_probe_and_match) {
 		auto cache_result_ptrs = FlatVector::GetData<data_ptr_t>(state.cache_result_pointers);
@@ -1059,6 +1059,7 @@ void JoinHashTable::InitializeFastCache() {
 	}
 
 	// Only activate for all-constant (fixed-size) equality key types
+	// TODO support non-fixed sized merge keys in THC
 	for (const auto &type : equality_types) {
 		if (type.InternalType() == PhysicalType::VARCHAR || type.InternalType() == PhysicalType::STRUCT ||
 		    type.InternalType() == PhysicalType::LIST) {
@@ -1071,7 +1072,6 @@ void JoinHashTable::InitializeFastCache() {
 	// This means cache hits completely bypass data_collection for key matching,
 	// payload gathering (GatherResult), AND chain following (AdvancePointers).
 
-	// TODO should we skip fast cache for certain key types? VARCHAR/LIST/STRUCT/etc
 	// TODO consts below are hacks - generalize!!!
 	const idx_t data_collection_row_size =
 	    pointer_offset + sizeof(data_ptr_t);             // TODO might be duplicative of logic in FashHashCache
