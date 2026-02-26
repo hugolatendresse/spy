@@ -38,8 +38,7 @@ public:
 	//! cache
 	TieredHashCache(idx_t capacity_p, idx_t row_size_p, idx_t row_copy_offset_p = 0)
 	    : capacity(capacity_p), bitmask(capacity_p - 1), row_size(row_size_p), row_copy_offset(row_copy_offset_p),
-	      entry_stride(ComputeEntryStride(row_size_p)),
-	      max_fill(static_cast<idx_t>(capacity_p * MAX_LOAD_FACTOR)) {
+	      entry_stride(ComputeEntryStride(row_size_p)), max_fill(static_cast<idx_t>(capacity_p * MAX_LOAD_FACTOR)) {
 		D_ASSERT(IsPowerOfTwo(capacity)); // Needed for bitmask logic
 		auto total_bytes = capacity * entry_stride;
 		// TODO should we use BPM? Or Arena?
@@ -47,9 +46,9 @@ public:
 		memset(data.get(), 0, total_bytes);
 	}
 
-	//! TODO Find the cache entry whose stored hash matches.
-	//! TODO Only compares hashes! Can have false positives!
-	//! Returns pointers to the cached row data (usable by RowMatcher and GatherResult).
+	//! Find the cache entry whose hash matches an input hash.
+	//! Only compares hashes, which can lead to a false positive.
+	//! Returns a pointer to the cached row data (usable by RowMatcher and GatherResult).
 	//! On miss, doesn't go to data_collection, but records the row in cache_miss_sel (and cache_miss_count)
 	void ProbeByHash(const hash_t *hashes_dense, idx_t count, const SelectionVector *row_sel, bool has_row_sel,
 	                 SelectionVector &cache_candidates_sel, idx_t &cache_candidates_count,
@@ -75,7 +74,7 @@ public:
 			auto slot = probe_hash & bitmask;
 
 			bool found = false;
-			while (true) {
+			for (idx_t probes = 0; probes < MAX_PROBE_DISTANCE; probes++) {
 				auto entry_ptr = GetEntryPtr(slot);
 				const auto stored_hash = LoadHash(entry_ptr);
 				if (stored_hash == 0) {
@@ -97,7 +96,7 @@ public:
 		}
 	}
 
-    //! Looks up based on hash and key.
+	//! Looks up based on hash and key.
 	//! Returns true matches only (no false positives like ProbeByHash).
 	//! On match, result_ptrs points to the cached full row (usable by GatherResult).
 	template <class T>
@@ -163,7 +162,8 @@ public:
 		// Without this guard the unbounded linear-probing loop below can
 		// spin forever when the table is (nearly) full.
 		if (insert_new.load(std::memory_order_relaxed) >= max_fill) {
-			return; // TODO is there a way to communicate that to JoinHashTable to avoid having to try to insert thousands of additional times?
+			return; // TODO is there a way to communicate that to JoinHashTable to avoid having to try to insert
+			        // thousands of additional times?
 		}
 		auto slot = hash & bitmask;
 		for (idx_t probes = 0; probes < MAX_PROBE_DISTANCE; probes++) {
@@ -186,7 +186,7 @@ public:
 			slot = (slot + 1) & bitmask; // linear probe is the hashes don't fully match
 		}
 		// Exceeded MAX_PROBE_DISTANCE -> silently drop the entry. It will be a miss later.
-		// TODO should we completely stop populating the THC if we reach here? 
+		// TODO should we completely stop populating the THC if we reach here?
 	}
 
 	idx_t GetCapacity() const {
@@ -258,7 +258,7 @@ private:
 	idx_t row_size;
 	idx_t row_copy_offset;
 	idx_t entry_stride;
-	idx_t max_fill;  //! capacity * MAX_LOAD_FACTOR — Insert refuses beyond this
+	idx_t max_fill; //! capacity * MAX_LOAD_FACTOR — Insert refuses beyond this
 	unsafe_unique_array<data_t> data;
 };
 

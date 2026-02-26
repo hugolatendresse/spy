@@ -561,10 +561,10 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 	// Fallback path for more complex keys.
 	// ProbeAndMatch (called above) is only used for single, integral keys
 	// Everything else using ProbeByHash below
-	// ProbyByHash finds cache entries with matching hashes (no key check)
-	// RowMatcher.Match checks actual keys equality for those hash candidates
-	// This pattern allows us to avoid using RowMatcher for simply keys and 
-	// prevents the need of implementing complex logic in the THC.
+	// ProbyByHash finds a cache entry with a matching hash (no key check)
+	// RowMatcher.Match checks actual keys equality for that THC candidates
+	// This pattern allows us to avoid using RowMatcher for simple keys and 
+	// prevents the need of implementing complex row matching logic in the THC.
 	if (!used_probe_and_match) {
 		auto cache_result_ptrs = FlatVector::GetData<data_ptr_t>(state.cache_result_pointers);
 		auto cache_rhs_locations = FlatVector::GetData<data_ptr_t>(state.cache_rhs_row_locations);
