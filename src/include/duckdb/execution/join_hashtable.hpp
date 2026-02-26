@@ -357,8 +357,7 @@ private:
 	//! An empty tuple that's a "dead end", can be used to stop chains early
 	unsafe_unique_array<data_t> dead_end;
 
-
-    //! Shared fast hash cache for accelerating repeated probe lookups.
+	//! Shared fast hash cache for accelerating repeated probe lookups.
 	//! Created during Finalize when the hash table is large enough.
 	unique_ptr<TieredHashCache> fast_cache;
 
