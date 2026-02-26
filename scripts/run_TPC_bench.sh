@@ -10,6 +10,7 @@ RUN_TPCH=1
 RUN_TPCDS=1
 DB_BASE_PATH=""
 RPT_FORWARD_ONLY=0
+TPCH_QUERY=""
 
 usage() {
 	cat <<'USAGE'
@@ -23,6 +24,7 @@ Options:
 	--out-dir <dir>         Output directory for results (default: ./tpch_results)
 	--tpch-only             Run only TPC-H (default: run both TPC-H and TPC-DS)
 	--tpcds-only            Run only TPC-DS (default: run both TPC-H and TPC-DS)
+	--tpch-query <number>   Run only a specific TPC-H query (1-22, implies --tpch-only)
 	--rpt-forward-only      Disable the RPT backward pass (forward pass only)
 	-h, --help              Show this help
 
@@ -30,6 +32,7 @@ Examples:
 	scripts/run_TPC_bench.sh --db ./data --sf 1
 	scripts/run_TPC_bench.sh --generate --sf 10
 	scripts/run_TPC_bench.sh --tpch-only --sf 5
+	scripts/run_TPC_bench.sh --tpch-query 5 --sf 500
 	scripts/run_TPC_bench.sh --tpcds-only --sf 10
 USAGE
 }
@@ -68,6 +71,12 @@ while [[ $# -gt 0 ]]; do
 			RUN_TPCH=0
 			RUN_TPCDS=1
 			shift
+			;;
+		--tpch-query)
+			TPCH_QUERY="$2"
+			RUN_TPCH=1
+			RUN_TPCDS=0
+			shift 2
 			;;
 		--rpt-forward-only)
 			RPT_FORWARD_ONLY=1
@@ -202,7 +211,18 @@ if [[ $RUN_TPCH -eq 1 ]]; then
 
 	TPCH_START_WALL=$(date +%s.%N)
 
-	for Q in $(seq 1 22); do
+	# Determine which queries to run
+	if [[ -n "$TPCH_QUERY" ]]; then
+		if ! [[ "$TPCH_QUERY" =~ ^[0-9]+$ ]] || [[ "$TPCH_QUERY" -lt 1 ]] || [[ "$TPCH_QUERY" -gt 22 ]]; then
+			echo "Error: --tpch-query must be between 1 and 22" >&2
+			exit 1
+		fi
+		QUERY_RANGE="$TPCH_QUERY"
+	else
+		QUERY_RANGE=$(seq 1 22)
+	fi
+
+	for Q in $QUERY_RANGE; do
 		echo "Running TPC-H query ${Q}..."
 		TIME_FILE=$(mktemp)
 		if /usr/bin/time -f "%e" -o "$TIME_FILE" \
