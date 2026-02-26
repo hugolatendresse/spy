@@ -12,9 +12,15 @@ namespace duckdb {
 //! TieredHashCache is a hash table that caches recently
 //! matched probe entries to accelerate repeated hash join lookups.
 //!
-//! Each entry stores: [hash (8 bytes)] [full_row from data_selection]
+//! Each entry stores: [hash (8 bytes)] [full_row from data_collection]
 //! The full_row is a copy of the entire data_collection row, so cache hits
-//! completely bypass data_collection access for both key and payload
+//! bypass data_collection access for both key and payload
+//!
+//! If the build side has duplicate keys, only the first of the chain will be
+//! copied to the THC, and others will need to be accessed from data_collection.
+//! That is why we copy the next_pointer as part of the data_collection row.
+//! Row chains only happen for identical keys in data_collection. Having unique keys
+//! guarantees no chaining (even upon 64-bit hash collisions). 
 //!
 //! Thread safety is simply based on compare-and-swap (check if entry is empty)
 class TieredHashCache {

@@ -1067,11 +1067,12 @@ void JoinHashTable::InitializeFastCache() {
 		}
 	}
 
-	// Store the data_collection row per cache entry, including the chain pointer
-	// at pointer_offset so that AdvancePointers can correctly follow chains.
-	// This means cache hits completely bypass data_collection for key matching,
-	// payload gathering (GatherResult), AND chain following (AdvancePointers).
-
+	// THC stores one data_collection row per cache entry, including the next_pointer
+	// at the end of the row that acts as a chain pointer on the build side.
+	// It's found at pointer_offset on the build side and enables AdvancePointers to follow chains.
+	// Cache hits in THC completely bypass data_collection for key matching
+	// and payload gathering (GatherResult), but only for the first key match. 
+	// For chain following (in case there are duplicate keys), need to go to data_collection.
 	// TODO consts below are hacks - generalize!!!
 	const idx_t data_collection_row_size =
 	    pointer_offset + sizeof(data_ptr_t);             // TODO might be duplicative of logic in FashHashCache
