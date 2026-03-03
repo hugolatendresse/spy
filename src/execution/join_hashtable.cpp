@@ -367,7 +367,7 @@ inline bool JoinHashTable::UseSalt() const {
 }
 
 //! =====================================================================
-//! ProbeTHCAndFallback — shared probe path for READ_ONLY and WARMUP (cycle > 0)
+//! ProbeTHCAndFallback — shared probe path for READ_ONLY and COLLECT (cycle > 0)
 //! =====================================================================
 //!
 //! Densifies hashes into state.hashes_dense_v, probes the THC using either
@@ -379,11 +379,11 @@ inline bool JoinHashTable::UseSalt() const {
 //!   match_count    = total number of rows that found a match (THC + fallback)
 //!   cache_miss_count = number of rows the THC could not serve
 //!
-//! Side-effect for warmup (cycle > 0):
-//!   state.warmup_miss_match_sel / warmup_miss_match_count are populated with
+//! Side-effect for collection (cycle > 0):
+//!   state.thc_miss_match_sel / thc_miss_match_count are populated with
 //!   the fallback rows that actually matched, enabling the caller to collect
 //!   {hash, row_ptr} pairs for THC insertion.
-//!   state.warmup_miss_dense_index maps row_index -> dense hash index.
+//!   state.thc_miss_dense_index maps row_index -> dense hash index.
 //!
 void JoinHashTable::ProbeTHCAndFallback(DataChunk &keys, TupleDataChunkState &key_state, ProbeState &state,
                                         Vector &hashes_v, const SelectionVector *sel, idx_t &count, bool has_sel,
@@ -541,7 +541,7 @@ void JoinHashTable::ProbeTHCAndFallback(DataChunk &keys, TupleDataChunkState &ke
 	// ---- Step 4: Regular HT probe for THC misses ----
 	// Rows that the THC could not serve are resolved via the original
 	// DuckDB linear-probing HT (GetRowPointersInternal).
-	state.warmup_miss_match_count = 0; // Reset miss-match tracking for warmup
+	state.thc_miss_match_count = 0; // Reset miss-match tracking for collection
 	if (cache_miss_count > 0) {
 		SelectionVector regular_match_sel(STANDARD_VECTOR_SIZE);
 		idx_t regular_count = cache_miss_count;
@@ -555,11 +555,11 @@ void JoinHashTable::ProbeTHCAndFallback(DataChunk &keys, TupleDataChunkState &ke
 		}
 
 		// Append fallback matches to the combined match_sel.
-		// Also populate warmup_miss_match_sel for warmup (cycle > 0) collection.
+		// Also populate thc_miss_match_sel for collection (cycle > 0).
 		for (idx_t i = 0; i < regular_count; i++) {
 			const auto row_index = regular_match_sel.get_index(i);
 			match_sel.set_index(match_count++, row_index);
-			state.warmup_miss_match_sel.set_index(state.warmup_miss_match_count++, row_index);
+			state.thc_miss_match_sel.set_index(state.thc_miss_match_count++, row_index);
 		}
 
 		// Build the dense-index mapping so the caller can look up the hash
@@ -568,17 +568,17 @@ void JoinHashTable::ProbeTHCAndFallback(DataChunk &keys, TupleDataChunkState &ke
 		// the dense hashes_dense[] index used for that row.
 		// Since hashes_dense[i] corresponds to row_index = has_sel ? sel->get_index(i) : i,
 		// we build the reverse mapping here.
-		if (state.warmup_miss_match_count > 0) {
+		if (state.thc_miss_match_count > 0) {
 			if (!has_sel) {
 				// Without selection, dense index == row index
-				for (idx_t i = 0; i < state.warmup_miss_match_count; i++) {
-					const auto row_index = state.warmup_miss_match_sel.get_index(i);
-					state.warmup_miss_dense_index[row_index] = row_index;
+				for (idx_t i = 0; i < state.thc_miss_match_count; i++) {
+					const auto row_index = state.thc_miss_match_sel.get_index(i);
+					state.thc_miss_dense_index[row_index] = row_index;
 				}
 			} else {
 				// With selection, build a full reverse map from row_index -> dense_index
 				for (idx_t i = 0; i < count; i++) {
-					state.warmup_miss_dense_index[sel->get_index(i)] = i;
+					state.thc_miss_dense_index[sel->get_index(i)] = i;
 				}
 			}
 		}
@@ -632,27 +632,27 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 	//
 	// We alternate between two phases per thread:
 	//
-	//   WARMUP:    Probe the HT and collect matched entries into warmup_entries.
+	//   COLLECT:    Probe the HT and collect matched entries into collected_entries.
 	//              On cycle 0: use the regular DuckDB probe (THC is empty).
 	//              On cycle > 0: probe THC first, fall back to regular HT for
 	//              THC misses, and collect only miss-matched entries.
-	//              When warmup_rows_in_phase >= WARMUP_ROWS, flush entries into
+	//              When probe_rows_in_phase >= COLLECT_PHASE_ROWS, flush entries into
 	//              the shared THC and transition to READ_ONLY.
 	//
 	//   READ_ONLY: Probe the THC, fall back for misses, track miss rate.
 	//              When read_only_rows_processed >= read_only_rows_target
 	//              (a "checkpoint"), evaluate three guards:
 	//                1) miss_rate >= THC_MISS_SKIP_THRESHOLD (10%)
-	//                2) budget_ok: another warmup won't exceed 2% overhead
+	//                2) budget_ok: another collect phase won't exceed 2% overhead
 	//                3) !thc_full: the THC isn't saturated
-	//              If all three pass → enter WARMUP. Otherwise → stay in
+	//              If all three pass → enter COLLECT. Otherwise → stay in
 	//              READ_ONLY with doubled target (exponential backoff).
 	//              Always increment checkpoint_count.
 	//
 	// This design ensures:
-	//   - Total warmup overhead is bounded to ~2% of probe rows
+	//   - Total collect phases are bounded to ~2% of probe rows
 	//   - READ_ONLY segments grow exponentially, reducing checkpoint overhead
-	//   - Warmup is skipped when the THC is effective (low miss rate) or full
+	//   - Collection is skipped when the THC is effective (low miss rate) or full
 	// =====================================================================
 
 	// Track lifetime probe rows for the budget calculation
@@ -660,15 +660,15 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 	state.total_probe_rows += input_count;
 
 	// =================================================================
-	// WARMUP PHASE
+	// COLLECT PHASE
 	// =================================================================
-	if (state.tiered_hash_cache_phase == TieredHashCachePhase::WARMUP) {
+	if (state.tiered_hash_cache_phase == TieredHashCachePhase::COLLECT) {
 
 		if (state.cycle_count == 0) {
 			// ----------------------------------------------------------
-			// First warmup (cycle 0): THC is empty, use regular DuckDB probe.
+			// First collect phase (cycle 0): THC is empty, use regular DuckDB probe.
 			// Save hashes before GetRowPointersInternal modifies them,
-			// then collect all matched rows into warmup_entries.
+			// then collect all matched rows into collected_entries.
 			// ----------------------------------------------------------
 
 			// Save original hashes before GetRowPointersInternal modifies them
@@ -696,22 +696,22 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 				                              pointers_result_v, match_sel, has_sel);
 			}
 
-			// Collect every matched row as a warmup entry so that the first
+			// Collect every matched row as a collected entry so that the first
 			// THC population covers the broadest possible set of hot keys.
 			auto pointers_result = FlatVector::GetData<data_ptr_t>(pointers_result_v);
 			for (idx_t i = 0; i < count; i++) {
 				const auto row_index = match_sel.get_index(i);
 				const auto hash = saved_hashes[row_index];
 				if (hash != 0) {
-					state.warmup_entries.push_back({hash, pointers_result[row_index]});
+					state.collected_entries.push_back({hash, pointers_result[row_index]});
 				}
 			}
 
 		} else {
 			// ----------------------------------------------------------
-			// Subsequent warmup (cycle > 0): THC already has entries.
+			// Subsequent collect phase (cycle > 0): THC already has entries.
 			// Probe THC first, fall back to regular HT for misses.
-			// Only collect THC-miss matches into warmup_entries so we
+			// Only collect THC-miss matches into collected_entries so we
 			// insert exactly the "new hot" keys that the THC is missing.
 			// ----------------------------------------------------------
 
@@ -727,52 +727,52 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 			// These are exactly the rows that the THC should learn about.
 			auto pointers_result = FlatVector::GetData<data_ptr_t>(pointers_result_v);
 			auto hashes_dense = FlatVector::GetData<hash_t>(state.hashes_dense_v);
-			for (idx_t i = 0; i < state.warmup_miss_match_count; i++) {
-				const auto row_index = state.warmup_miss_match_sel.get_index(i);
-				const auto hash = hashes_dense[state.warmup_miss_dense_index[row_index]];
+			for (idx_t i = 0; i < state.thc_miss_match_count; i++) {
+				const auto row_index = state.thc_miss_match_sel.get_index(i);
+				const auto hash = hashes_dense[state.thc_miss_dense_index[row_index]];
 				if (hash != 0) {
-					state.warmup_entries.push_back({hash, pointers_result[row_index]});
+					state.collected_entries.push_back({hash, pointers_result[row_index]});
 				}
 			}
 		}
 
-		// Track warmup overhead
-		state.warmup_rows_in_phase += input_count;
-		state.total_warmup_rows += input_count;
+		// Track collection overhead
+		state.probe_rows_in_phase += input_count;
+		state.total_collect_phase_rows += input_count;
 
 		// ----------------------------------------------------------
-		// Check if this warmup phase is complete.
+		// Check if this collect phase is complete.
 		// Flush collected entries into the shared THC and transition
 		// to READ_ONLY with the appropriate exponential backoff target.
 		// ----------------------------------------------------------
-		if (state.warmup_rows_in_phase >= TIERED_HASH_CACHE_WARMUP_ROWS) {
+		if (state.probe_rows_in_phase >= COLLECT_PHASE_PROBE_ROWS) {
 			// Insert all collected entries into the shared THC.
 			// The THC's CAS-based Insert is thread-safe and silently
 			// drops entries if the table is full or has hash collisions.
-			for (auto &entry : state.warmup_entries) {
+			for (auto &entry : state.collected_entries) {
 				tiered_hash_cache->Insert(entry.hash, entry.row_ptr);
 			}
 
 			fprintf(stderr,
-			        "[Warmup→ReadOnly] cycle=%lu, warmup_rows=%lu, buffered=%lu, "
+			        "[Collect->Read-Only] cycle=%lu, probe_rows_in_phase=%lu, buffered=%lu, "
 			        "cache_fill=%lu/%lu, insert_new=%lu, insert_dup=%lu, "
-			        "total_warmup=%lu, total_probe=%lu (%.2f%%)\n",
+			        "total_collect_phase_rows=%lu, total_probe=%lu (%.2f%%)\n",
 			        (unsigned long)state.cycle_count,
-			        (unsigned long)state.warmup_rows_in_phase,
-			        (unsigned long)state.warmup_entries.size(),
+			        (unsigned long)state.probe_rows_in_phase,
+			        (unsigned long)state.collected_entries.size(),
 			        (unsigned long)tiered_hash_cache->insert_new.load(),
 			        (unsigned long)tiered_hash_cache->GetCapacity(),
 			        (unsigned long)tiered_hash_cache->insert_new.load(),
 			        (unsigned long)tiered_hash_cache->insert_dup.load(),
-			        (unsigned long)state.total_warmup_rows,
+			        (unsigned long)state.total_collect_phase_rows,
 			        (unsigned long)state.total_probe_rows,
 			        state.total_probe_rows > 0
-			            ? 100.0 * static_cast<double>(state.total_warmup_rows) / static_cast<double>(state.total_probe_rows)
+			            ? 100.0 * static_cast<double>(state.total_collect_phase_rows) / static_cast<double>(state.total_probe_rows)
 			            : 0.0);
 
-			// Free the warmup buffer
-			state.warmup_entries.clear();
-			state.warmup_entries.shrink_to_fit();
+			// Free the collection buffer
+			state.collected_entries.clear();
+			state.collected_entries.shrink_to_fit();
 
 			// Transition to READ_ONLY with exponentially growing target.
 			// The first READ_ONLY segment uses READ_ONLY_BASE_ROWS.
@@ -792,7 +792,7 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 	// =================================================================
 	// Probe the THC, fall back to regular HT for misses.
 	// Track miss rate. At checkpoint boundaries, evaluate whether to
-	// enter WARMUP or stay in READ_ONLY with a doubled target.
+	// enter COLLECT or stay in READ_ONLY with a doubled target.
 	// =================================================================
 
 	idx_t match_count = 0;
@@ -809,7 +809,7 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 	state.read_only_rows_processed += input_count;
 
 	// ----------------------------------------------------------
-	// Checkpoint: decide whether to enter WARMUP or keep reading.
+	// Checkpoint: decide whether to enter COLLECT or keep reading.
 	// This happens when we've processed enough rows in this
 	// READ_ONLY segment (the target grows exponentially).
 	// ----------------------------------------------------------
@@ -820,18 +820,18 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 		    ? static_cast<double>(state.ro_miss_count) / static_cast<double>(state.ro_total_count)
 		    : 0.0;
 
-		// Check whether we can afford another warmup phase within the 2% budget.
-		// We project the cost of the next warmup (WARMUP_ROWS) and check if
-		// total_warmup_rows + WARMUP_ROWS stays within the budget.
+		// Check whether we can afford another collect phase within the total budget.
+		// We project the cost of the next COLLECT_PHASE_ROWS and check if
+		// total_collect_phase_rows + COLLECT_PHASE_ROWS stays within the budget.
 		const bool budget_ok =
-		    (state.total_warmup_rows + TIERED_HASH_CACHE_WARMUP_ROWS) <=
-		    static_cast<idx_t>(static_cast<double>(state.total_probe_rows) * WARMUP_BUDGET_FRACTION);
+		    (state.total_collect_phase_rows + COLLECT_PHASE_PROBE_ROWS) <=
+		    static_cast<idx_t>(static_cast<double>(state.total_probe_rows) * COLLECT_BUDGET_FRACTION);
 
 		// Check whether the THC has room for new entries
 		const bool thc_full = tiered_hash_cache->IsFull();
 
-		// All three guards must pass to enter WARMUP
-		const bool should_warmup = (miss_rate >= THC_MISS_SKIP_THRESHOLD) && budget_ok && !thc_full;
+		// All three guards must pass to enter COLLECT
+		const bool should_collect = (miss_rate >= THC_MISS_SKIP_THRESHOLD) && budget_ok && !thc_full;
 
 		fprintf(stderr,
 		        "[Checkpoint] checkpoint=%lu, ro_rows=%lu, miss_rate=%.2f%%, budget_ok=%d, thc_full=%d → %s\n",
@@ -839,16 +839,16 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 		        (unsigned long)state.read_only_rows_processed,
 		        miss_rate * 100.0,
 		        (int)budget_ok, (int)thc_full,
-		        should_warmup ? "WARMUP" : "SKIP");
+		        should_collect ? "COLLECT" : "SKIP");
 
 		// Always increment checkpoint count (controls exponential backoff)
 		state.checkpoint_count++;
 
-		if (should_warmup) {
-			// Enter WARMUP phase: reset per-phase state
-			state.tiered_hash_cache_phase = TieredHashCachePhase::WARMUP;
-			state.warmup_rows_in_phase = 0;
-			state.warmup_entries.clear();
+		if (should_collect) {
+			// Enter COLLECT phase: reset per-phase state
+			state.tiered_hash_cache_phase = TieredHashCachePhase::COLLECT;
+			state.probe_rows_in_phase = 0;
+			state.collected_entries.clear();
 		} else {
 			// Stay in READ_ONLY with a doubled target.
 			// Reset segment counters for the next checkpoint evaluation.
