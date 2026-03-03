@@ -19,8 +19,12 @@ namespace duckdb {
 //! If the build side has duplicate keys, only the first of the chain will be
 //! copied to the THC, and others will need to be accessed from data_collection.
 //! That is why we copy the next_pointer as part of the data_collection row.
-//! Row chains only happen for identical keys in data_collection. Having unique keys
-//! guarantees no chaining (even upon 64-bit hash collisions). 
+//! Row chains only happen for identical keys in data_collection.
+//! 
+//! Having unique keys guarantees no chaining (even upon 64-bit hash collisions).
+//! However, is there are hash collisions from different keys on the build side,
+//! only one entry will be added to the THC, and others will fall back to regular
+//! probing. 
 //!
 //! Thread safety is simply based on compare-and-swap (check if entry is empty)
 class TieredHashCache {
@@ -56,6 +60,8 @@ public:
 	//! Only compares hashes, which can lead to a false positive.
 	//! Returns a pointer to the cached row data (usable by RowMatcher and GatherResult).
 	//! On miss, doesn't go to data_collection, but records the row in cache_miss_sel (and cache_miss_count)
+	//! @param cache_miss_sel holds the densely packed indices of `hashes_dense` that did not
+	//!                       get a match in the THC.
 	void ProbeByHash(const hash_t *hashes_dense, idx_t count, const SelectionVector *row_sel, bool has_row_sel,
 	                 SelectionVector &cache_candidates_sel, idx_t &cache_candidates_count,
 	                 data_ptr_t *cache_result_ptrs, data_ptr_t *cache_rhs_locations, SelectionVector &cache_miss_sel,
@@ -105,6 +111,8 @@ public:
 	//! Looks up based on hash and key.
 	//! Returns true matches only (no false positives like ProbeByHash).
 	//! On match, result_ptrs points to the cached full row (usable by GatherResult).
+	//! @param miss_sel holds the densely packed indices of `probe_keys` that did not
+	//!                 get a match in the THC
 	template <class T>
 	void ProbeAndMatch(const hash_t *hashes_dense, const T *probe_keys, idx_t key_offset, idx_t count,
 	                   const SelectionVector *row_sel, bool has_row_sel, data_ptr_t *result_ptrs,
@@ -136,6 +144,7 @@ public:
 				auto entry_ptr = GetEntryPtr(slot);
 				const auto stored_hash = LoadHash(entry_ptr);
 				if (stored_hash == 0) {
+					// THC does not have a match
 					break;
 				}
 				if (stored_hash == probe_hash) {

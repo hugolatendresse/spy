@@ -366,6 +366,22 @@ inline bool JoinHashTable::UseSalt() const {
 	return this->capacity > USE_SALT_THRESHOLD;
 }
 
+//! Get pointers to rows on the build side that match probe side keys
+//!
+//! Uses THC's `ProbeAndMatch` for single integer keys and `ProbeByHash` for everything else
+//! `ProbeAndMatch` does equality comparison on the keys
+//! `ProbeByHash` only compares hashes, and `Match` compares the keys
+//! 
+//! If there are duplicate keys on the build side, data_collection is guaranteed to link them 
+//! through NEXT pointers. ScanStructure will walk that linked list regardless of whether 
+//! `ProbeAndMatch` or `ProbeByHash` is used.
+//!
+//! If there are different keys with the same hash:
+//! - `ProbeAndMatch` compares keys and moves on to next slot of THC
+//! - `ProbeByHash` will stop at the first hash collision, the `Match` will 
+//!   find that the keys are different, and the probe will fall back to 
+//!   regular DuckDB probe with `GetRowPointersInternal`.
+//! 
 //! @param keys chunk of keys to match
 //! @param key_state TODO
 //! @param state the per-thread state (contains ht_offsets_v, etc)
@@ -476,7 +492,7 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 	// Probe THC
 
 	// For a single, integral key, we use ProbeAndMatch (exact probe)
-	// TODO For a complex key or multiple keys, the plan is to use ProbeByHash
+	// For a complex key or multiple keys, uses ProbeByHash
 
 	idx_t match_count = 0;
 	idx_t cache_miss_count = 0;
