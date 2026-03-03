@@ -147,12 +147,33 @@ public:
 		SelectionVector keys_no_match_sel;
 	};
 
-	enum class TieredHashCachePhase : uint8_t { WARMUP, READY };
+	//! The two phases of the adaptive THC lifecycle.
+	//! WARMUP: probe the regular HT (or THC + regular HT fallback on cycles > 0),
+	//!         and collect matched entries into warmup_entries for later THC insertion.
+	//! READ_ONLY: probe the THC first, fall back to regular HT for misses.
+	//!            Track miss rate to decide whether the next warmup cycle is needed.
+	enum class TieredHashCachePhase : uint8_t { WARMUP, READ_ONLY };
 
-	//! Number of probe-side rows each thread processed before populating the THC.
-	//! TODO 200k rows seem to work better than 100k? Understand what's going on
-	//!  In the future, we might want to at least cover 1 DuckDB row group (2048 * 60 = 122,880 rows)
+	//! Number of probe-side rows each thread processes during a single warmup phase.
+	//! Each warmup phase has a fixed row budget. The number of warmup phases is
+	//! controlled by the adaptive logic so that total warmup rows stay within
+	//! WARMUP_BUDGET_FRACTION of total probe rows.
 	static constexpr idx_t TIERED_HASH_CACHE_WARMUP_ROWS = 200000;
+
+	//! Initial length of the first READ_ONLY segment (in probe rows).
+	//! Subsequent READ_ONLY segments double in length (exponential backoff)
+	//! so that warmup overhead decreases over time.
+	static constexpr idx_t READ_ONLY_BASE_ROWS = TIERED_HASH_CACHE_WARMUP_ROWS;
+
+	//! Maximum fraction of total probe rows that may be spent in warmup phases.
+	//! Once total_warmup_rows exceeds total_probe_rows * WARMUP_BUDGET_FRACTION,
+	//! no further warmup phases will be entered.
+	static constexpr double WARMUP_BUDGET_FRACTION = 0.02;
+
+	//! If the THC miss rate during a READ_ONLY phase is below this threshold,
+	//! we skip the next warmup cycle. The THC is already serving most probe
+	//! rows effectively and refreshing it would waste CPU time.
+	static constexpr double THC_MISS_SKIP_THRESHOLD = 0.10;
 
 	struct WarmupEntry {
 		hash_t hash;
@@ -176,11 +197,68 @@ public:
 		SelectionVector cache_candidates_sel;
 		SelectionVector cache_miss_sel;
 
-		// THC warmup state (per thread)
-		TieredHashCachePhase tiered_hash_cache_phase = TieredHashCachePhase::WARMUP;
-		idx_t warmup_rows_probed = 0;
+		// ---- Adaptive THC state (per thread) ----
+		// The adaptive algorithm alternates between WARMUP and READ_ONLY phases.
+		// WARMUP collects probe-matched entries and inserts them into the shared THC.
+		// READ_ONLY probes the THC and tracks miss rate for deciding the next warmup.
 
+		//! Current phase of the adaptive THC lifecycle
+		TieredHashCachePhase tiered_hash_cache_phase = TieredHashCachePhase::WARMUP;
+
+		//! How many warmup→read_only transitions have occurred so far.
+		//! cycle_count == 0 means we are still in the very first warmup.
+		//! On cycle 0, we use the regular DuckDB probe and save all matches.
+		//! On cycle > 0, we probe THC + regular fallback and save only THC-miss matches.
+		idx_t cycle_count = 0;
+
+		//! Rows processed in the current warmup phase (reset each time we enter WARMUP)
+		idx_t warmup_rows_in_phase = 0;
+
+		//! Buffer of {hash, row_ptr} pairs collected during warmup.
+		//! Flushed into the shared THC when warmup_rows_in_phase >= WARMUP_ROWS.
 		vector<WarmupEntry> warmup_entries;
+
+		//! How many checkpoints (end-of-READ_ONLY evaluations) have occurred.
+		//! The READ_ONLY segment length is READ_ONLY_BASE_ROWS * 2^checkpoint_count.
+		idx_t checkpoint_count = 0;
+
+		//! Target number of rows for the current READ_ONLY segment.
+		//! Doubles at every checkpoint (exponential backoff).
+		idx_t read_only_rows_target = 0;
+
+		//! Rows processed so far in the current READ_ONLY segment
+		idx_t read_only_rows_processed = 0;
+
+		//! Number of THC misses accumulated during the current READ_ONLY segment.
+		//! Used to compute the miss rate at checkpoint time.
+		idx_t ro_miss_count = 0;
+
+		//! Total rows probed during the current READ_ONLY segment.
+		//! Together with ro_miss_count, gives the miss rate.
+		idx_t ro_total_count = 0;
+
+		//! Lifetime count of rows spent in warmup phases across all cycles.
+		//! Compared against total_probe_rows * WARMUP_BUDGET_FRACTION to enforce
+		//! the 2% overhead cap.
+		idx_t total_warmup_rows = 0;
+
+		//! Lifetime count of all probe rows processed by this thread.
+		//! Used as the denominator for the warmup budget fraction check.
+		idx_t total_probe_rows = 0;
+
+		//! --- Scratch space for collecting THC-miss matches during warmup (cycle > 0) ---
+		//! After ProbeTHCAndFallback runs, these record which miss-fallback rows actually
+		//! found a match in the regular HT, so we can insert them into the THC.
+
+		//! Selection vector of row indices that were THC misses but matched in regular HT
+		SelectionVector warmup_miss_match_sel = SelectionVector(STANDARD_VECTOR_SIZE);
+
+		//! Count of entries in warmup_miss_match_sel
+		idx_t warmup_miss_match_count = 0;
+
+		//! Maps row_index -> dense index in hashes_dense for THC-miss rows.
+		//! Needed to recover the original hash for insertion into the THC.
+		idx_t warmup_miss_dense_index[STANDARD_VECTOR_SIZE] = {};
 	};
 
 	struct InsertState : SharedState {
@@ -333,6 +411,17 @@ private:
 	void GetRowPointers(DataChunk &keys, TupleDataChunkState &key_state, ProbeState &state, Vector &hashes_v,
 	                    const SelectionVector *sel, idx_t &count, Vector &pointers_result_v, SelectionVector &match_sel,
 	                    bool has_sel);
+
+	//! Shared THC probe + regular HT fallback logic used by both READ_ONLY and WARMUP (cycle > 0).
+	//! Densifies hashes, probes the THC (ProbeAndMatch or ProbeByHash), falls back to
+	//! GetRowPointersInternal for misses, and returns the combined match results.
+	//! On return, match_count and cache_miss_count are set.
+	//! When called from WARMUP (cycle > 0), the caller reads state.warmup_miss_match_sel
+	//! and state.warmup_miss_match_count to find which miss-fallback rows found a match.
+	void ProbeTHCAndFallback(DataChunk &keys, TupleDataChunkState &key_state, ProbeState &state,
+	                        Vector &hashes_v, const SelectionVector *sel, idx_t &count, bool has_sel,
+	                        Vector &pointers_result_v, SelectionVector &match_sel,
+	                        idx_t &match_count, idx_t &cache_miss_count);
 
 private:
 	//! Insert the given set of locations into the HT with the given set of hashes_v

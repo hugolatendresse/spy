@@ -208,6 +208,14 @@ public:
 		return capacity;
 	}
 
+	//! Returns true when the THC has reached its maximum load factor
+	//! and will silently drop any further Insert calls.
+	//! Used by the adaptive logic to skip collection phases
+	//! when the cache is saturated and no new entries can be added.
+	bool IsFull() const {
+		return insert_new.load(std::memory_order_relaxed) >= max_fill;
+	}
+
 	idx_t CountOccupiedEntries() const {
 		idx_t count = 0;
 		for (idx_t s = 0; s < capacity; s++) {
