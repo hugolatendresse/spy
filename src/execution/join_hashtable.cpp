@@ -254,6 +254,8 @@ static idx_t ProbeForPointers(JoinHashTable::ProbeState &state, JoinHashTable &h
 
 //! Gets a pointer to the entry in the HT for each of the hashes_v using linear probing. Will update the key_match_sel
 //! vector and the count argument to the number and position of the matches
+//! If `keys` and `hashes_v` are not dense, `row_sel` dictates which keys to look for.
+//! Pointers get populated in `pointers_result_v`.
 template <bool USE_SALTS>
 static void GetRowPointersInternal(DataChunk &keys, TupleDataChunkState &key_state, JoinHashTable::ProbeState &state,
                                    Vector &hashes_v, const SelectionVector *row_sel, idx_t &count, JoinHashTable &ht,
@@ -394,9 +396,10 @@ void JoinHashTable::ProbeTHCAndFallback(DataChunk &keys, TupleDataChunkState &ke
 	// The THC probe functions expect a dense array of hashes (one per probe row,
 	// indexed 0..count-1). If a selection vector is in use, we need to gather
 	// the hashes into a contiguous buffer.
+	// TODO Let's find a way to avoid those memcopies
 	auto hashes_dense = FlatVector::GetData<hash_t>(state.hashes_dense_v);
 	if (!has_sel) {
-		// Already dense // TODO is that true?
+		// Already dense
 		hashes_v.Flatten(count);
 		auto hashes_flat = FlatVector::GetData<hash_t>(hashes_v);
 		memcpy(hashes_dense, hashes_flat, count * sizeof(hash_t));
@@ -426,6 +429,8 @@ void JoinHashTable::ProbeTHCAndFallback(DataChunk &keys, TupleDataChunkState &ke
 		ScopedHashJoinTimer tiered_hash_cache_timer(state.tiered_hash_cache_time_ns);
 		keys.data[0].Flatten(keys.size());
 
+		// This switch statement populates `match_sel` and `state.cache_miss_sel` with indexes of keys that 
+		// found and didn't find a match, respectively.
 		switch (equality_types[0].InternalType()) {
 		case PhysicalType::INT8: {
 			auto probe_keys = FlatVector::GetData<int8_t>(keys.data[0]);
@@ -522,6 +527,7 @@ void JoinHashTable::ProbeTHCAndFallback(DataChunk &keys, TupleDataChunkState &ke
 				    state.cache_rhs_row_locations, &state.keys_no_match_sel, cache_no_match_count);
 			}
 
+			// TODO rewrite ProbeByHash OR .Match to do this automatically. Why do this in a separate step after ProbeByHash? 
 			for (idx_t i = 0; i < cache_match_count; i++) {
 				const auto row_index = state.cache_candidates_sel.get_index(i);
 				pointers_result[row_index] = cache_result_ptrs[row_index];
@@ -531,6 +537,7 @@ void JoinHashTable::ProbeTHCAndFallback(DataChunk &keys, TupleDataChunkState &ke
 			// Key-comparison failures are reclassified as THC misses.
 			// These rows had a hash match in the THC but different keys,
 			// so they need to be resolved via the regular HT.
+			// TODO also do this inside ProbeByHash? Or .Match?
 			for (idx_t i = 0; i < cache_no_match_count; i++) {
 				const auto row_index = state.keys_no_match_sel.get_index(i);
 				state.cache_miss_sel.set_index(cache_miss_count++, row_index);
@@ -538,7 +545,7 @@ void JoinHashTable::ProbeTHCAndFallback(DataChunk &keys, TupleDataChunkState &ke
 		}
 	}
 
-	// ---- Step 4: Regular HT probe for THC misses ----
+	// ---- Step 4: Regular (fallback) HT probe for THC misses ----
 	// Rows that the THC could not serve are resolved via the original
 	// DuckDB linear-probing HT (GetRowPointersInternal).
 	state.thc_miss_match_count = 0; // Reset miss-match tracking for collection
@@ -546,6 +553,8 @@ void JoinHashTable::ProbeTHCAndFallback(DataChunk &keys, TupleDataChunkState &ke
 		SelectionVector regular_match_sel(STANDARD_VECTOR_SIZE);
 		idx_t regular_count = cache_miss_count;
 
+		// Pass `state.cache_miss_sel` as the `row_sel` argument to get pointers.
+		// The indices of the matches found go in `regular_match_sel`
 		if (UseSalt()) {
 			GetRowPointersInternal<true>(keys, key_state, state, hashes_v, &state.cache_miss_sel, regular_count, *this,
 			                             entries, pointers_result_v, regular_match_sel, true);
@@ -553,12 +562,14 @@ void JoinHashTable::ProbeTHCAndFallback(DataChunk &keys, TupleDataChunkState &ke
 			GetRowPointersInternal<false>(keys, key_state, state, hashes_v, &state.cache_miss_sel, regular_count, *this,
 			                              entries, pointers_result_v, regular_match_sel, true);
 		}
-
-		// Append fallback matches to the combined match_sel.
-		// Also populate thc_miss_match_sel for collection (cycle > 0).
+		
+		// Update two lists of indices with the regular (fallback) matches:
+		// The combined `match_sel` that has all matches `ProbeTHCAndFallback` found.
+		// thc_miss_match_sel which is used for collection during COLLECT phase.
 		for (idx_t i = 0; i < regular_count; i++) {
 			const auto row_index = regular_match_sel.get_index(i);
 			match_sel.set_index(match_count++, row_index);
+			// TODO the line below still runs during READ-ONLY phase! Need to fix that.
 			state.thc_miss_match_sel.set_index(state.thc_miss_match_count++, row_index);
 		}
 

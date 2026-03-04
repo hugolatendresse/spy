@@ -252,6 +252,10 @@ public:
 		//! found a match in the regular HT, so we can insert them into the THC.
 
 		//! Selection vector of row indices that were THC misses but matched in regular HT
+		//! It's used to note we need to fall back to regular probing for which rows within
+		//! the chunk.
+		//! Moreover, during the COLLECT phase, we iterate over those and create corresponding
+		//! collected_entries.
 		SelectionVector thc_miss_match_sel = SelectionVector(STANDARD_VECTOR_SIZE);
 
 		//! Count of entries in thc_miss_match_sel
