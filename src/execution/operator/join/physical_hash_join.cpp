@@ -1,6 +1,7 @@
 #include "duckdb/execution/operator/join/physical_hash_join.hpp"
 
 #include "duckdb/common/radix_partitioning.hpp"
+#include "duckdb/common/debug_log.hpp"
 #include "duckdb/common/types/value_map.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/execution/operator/aggregate/ungrouped_aggregate_state.hpp"
@@ -24,8 +25,6 @@
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/storage/temporary_memory_manager.hpp"
 #include "duckdb/execution/scoped_hash_join_timer.hpp"
-
-#include <iostream>
 
 namespace duckdb {
 
@@ -184,7 +183,7 @@ public:
 	~HashJoinGlobalSinkState() override {
 		auto probe_ns = execute_probe_time_ns.load(std::memory_order_relaxed) +
 		                external_probe_time_ns.load(std::memory_order_relaxed);
-		fprintf(stderr, "[HashJoinTiming] probe_ms=%.3f\n", static_cast<double>(probe_ns) / 1000000.0);
+		DEBUG_LOG("[HashJoinTiming] probe_ms=%.3f\n", static_cast<double>(probe_ns) / 1000000.0);
 	}
 
 	void ScheduleFinalize(Pipeline &pipeline, Event &event);
@@ -427,10 +426,9 @@ static void PrintJoinHashTableFinalizeStats(JoinHashTable &ht) {
 	const idx_t entries_bytes = ht.capacity * sizeof(ht_entry_t);
 	const idx_t row_data_bytes = ht.GetDataCollection().SizeInBytes();
 	const size_t mib = static_cast<size_t>(1024 * 1024);
-	fprintf(stderr,
-	        "[HashJoinFinalizeEvent::FinishEvent] total=%zu MiB (entries=%zu MiB, "
-	        "row_data=%zu MiB)\n",
-	        (size_t)(entries_bytes + row_data_bytes) / mib, (size_t)entries_bytes / mib, (size_t)row_data_bytes / mib);
+	DEBUG_LOG("[HashJoinFinalizeEvent::FinishEvent] total=%zu MiB (entries=%zu MiB, row_data=%zu MiB)\n",
+	               (size_t)(entries_bytes + row_data_bytes) / mib, (size_t)entries_bytes / mib,
+	               (size_t)row_data_bytes / mib);
 }
 
 //! If the data is very skewed (many of the exact same key), our finalize will become slow,
@@ -982,7 +980,7 @@ SinkFinalizeType PhysicalHashJoin::Finalize(Pipeline &pipeline, Event &event, Cl
 		auto key_type = ht.equality_types[0];
 		use_perfect_hash = sink.perfect_join_executor->BuildPerfectHashTable(key_type);
 	}
-	fprintf(stderr, "[PhysicalHashJoin::Finalize] Using perfect hashing: %d\n", use_perfect_hash);
+	DEBUG_LOG("[PhysicalHashJoin::Finalize] Using perfect hashing: %d\n", use_perfect_hash);
 
 	// In case of a large build side or duplicates, use regular hash join
 	if (!use_perfect_hash) {
@@ -1528,11 +1526,7 @@ void HashJoinLocalSourceState::ExternalProbe(HashJoinGlobalSinkState &sink, Hash
                                              DataChunk &chunk) {
 	D_ASSERT(local_stage == HashJoinSourceStage::PROBE && sink.hash_table->finalized);
 	{
-		std::cerr << "A thread is starting the timer in HashJoinLocalSourceState::ExternalProbe !!!!" << std::endl;
-		std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
-		std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
-		std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
-		std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+		DEBUG_LOG("[HashJoinLocalSourceState::ExternalProbe] Starting probe timer in HashJoinLocalSourceState!!!!!\n\nTODO: INVESTIGATE\n\n");
 		ScopedHashJoinTimer probe_timer(&external_probe_time_ns);
 
 		if (!scan_structure.is_null) {

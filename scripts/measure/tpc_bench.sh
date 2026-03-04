@@ -236,8 +236,13 @@ if [[ $RUN_TPCH -eq 1 ]]; then
 		echo "Running TPC-H query ${Q}..."
 		TIME_FILE=$(mktemp)
 		ERROR_FILE=$(mktemp)
+		# Show output only when running a single specific query via --tpch-query
+		OUTPUT_REDIRECT="/dev/null"
+		if [[ -n "$TPCH_QUERY" ]]; then
+			OUTPUT_REDIRECT="/dev/stdout"
+		fi
 		if /usr/bin/time -f "%e" -o "$TIME_FILE" \
-			"$DUCKDB_BIN" "$TPCH_DB_PATH" -c "${EXTRA_SET} LOAD tpch; PRAGMA tpch(${Q});" > /dev/null 2>"$ERROR_FILE"; then
+			"$DUCKDB_BIN" "$TPCH_DB_PATH" -c "${EXTRA_SET} LOAD tpch; PRAGMA tpch(${Q});" > "$OUTPUT_REDIRECT" 2>"$ERROR_FILE"; then
 			RUNTIME=$(cat "$TIME_FILE")
 		else
 			EXIT_CODE=$?
