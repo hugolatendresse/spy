@@ -6,6 +6,7 @@
 #include "duckdb/common/error_data.hpp"
 #include "duckdb/common/exception/transaction_exception.hpp"
 #include "duckdb/common/progress_bar/progress_bar.hpp"
+#include "duckdb/common/debug_log.hpp"
 #include "duckdb/common/serializer/buffered_file_writer.hpp"
 #include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/execution/column_binding_resolver.hpp"
@@ -356,7 +357,7 @@ ClientContext::CreatePreparedStatementInternal(ClientContextLock &lock, const st
                                                optional_ptr<case_insensitive_map_t<BoundParameterData>> values) {
 	StatementType statement_type = statement->type;
 	if (statement_type == StatementType::SELECT_STATEMENT) {
-		printf("ClientContext::CreatePreparedStatementInternal entering a SELECT statement\n");
+		DEBUG_LOG("ClientContext::CreatePreparedStatementInternal entering a SELECT statement\n");
 	}
 	auto result = make_shared_ptr<PreparedStatementData>(statement_type);
 

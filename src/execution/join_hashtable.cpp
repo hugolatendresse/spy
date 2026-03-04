@@ -1,10 +1,8 @@
 #include "duckdb/execution/join_hashtable.hpp"
 
-#include <cstdio>
-#include <iostream>
-
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/radix_partitioning.hpp"
+#include "duckdb/common/debug_log.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/common/vector_size.hpp"
 #include "duckdb/execution/ht_entry.hpp"
@@ -764,22 +762,22 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 				tiered_hash_cache->Insert(entry.hash, entry.row_ptr);
 			}
 
-			fprintf(stderr,
-			        "[Collect->Read-Only] cycle=%lu, probe_rows_in_phase=%lu, buffered=%lu, "
-			        "cache_fill=%lu/%lu, insert_new=%lu, insert_dup=%lu, "
-			        "total_collect_phase_rows=%lu, total_probe=%lu (%.2f%%)\n",
-			        (unsigned long)state.cycle_count,
-			        (unsigned long)state.probe_rows_in_phase,
-			        (unsigned long)state.collected_entries.size(),
-			        (unsigned long)tiered_hash_cache->insert_new.load(),
-			        (unsigned long)tiered_hash_cache->GetCapacity(),
-			        (unsigned long)tiered_hash_cache->insert_new.load(),
-			        (unsigned long)tiered_hash_cache->insert_dup.load(),
-			        (unsigned long)state.total_collect_phase_rows,
-			        (unsigned long)state.total_probe_rows,
-			        state.total_probe_rows > 0
-			            ? 100.0 * static_cast<double>(state.total_collect_phase_rows) / static_cast<double>(state.total_probe_rows)
-			            : 0.0);
+			DEBUG_LOG("[Collect->Read-Only] cycle=%lu, probe_rows_in_phase=%lu, buffered=%lu, "
+			               "cache_fill=%lu/%lu, insert_new=%lu, insert_dup=%lu, "
+			               "total_collect_phase_rows=%lu, total_probe=%lu (%.2f%%)\n",
+			               (unsigned long)state.cycle_count,
+			               (unsigned long)state.probe_rows_in_phase,
+			               (unsigned long)state.collected_entries.size(),
+			               (unsigned long)tiered_hash_cache->insert_new.load(),
+			               (unsigned long)tiered_hash_cache->GetCapacity(),
+			               (unsigned long)tiered_hash_cache->insert_new.load(),
+			               (unsigned long)tiered_hash_cache->insert_dup.load(),
+			               (unsigned long)state.total_collect_phase_rows,
+			               (unsigned long)state.total_probe_rows,
+			               state.total_probe_rows > 0
+			                   ? 100.0 * static_cast<double>(state.total_collect_phase_rows) /
+			                         static_cast<double>(state.total_probe_rows)
+			                   : 0.0);
 
 			// Free the collection buffer
 			state.collected_entries.clear();
@@ -844,13 +842,12 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 		// All three guards must pass to enter COLLECT
 		const bool should_collect = (miss_rate >= THC_MISS_SKIP_THRESHOLD) && budget_ok && !thc_full;
 
-		fprintf(stderr,
-		        "[Checkpoint] checkpoint=%lu, ro_rows=%lu, miss_rate=%.2f%%, budget_ok=%d, thc_full=%d → %s\n",
-		        (unsigned long)state.checkpoint_count,
-		        (unsigned long)state.read_only_rows_processed,
-		        miss_rate * 100.0,
-		        (int)budget_ok, (int)thc_full,
-		        should_collect ? "COLLECT" : "SKIP");
+		DEBUG_LOG("[Checkpoint] checkpoint=%lu, ro_rows=%lu, miss_rate=%.2f%%, budget_ok=%d, thc_full=%d -> %s\n",
+		               (unsigned long)state.checkpoint_count,
+		               (unsigned long)state.read_only_rows_processed,
+		               miss_rate * 100.0,
+		               (int)budget_ok, (int)thc_full,
+		               should_collect ? "COLLECT" : "SKIP");
 
 		// Always increment checkpoint count (controls exponential backoff)
 		state.checkpoint_count++;
@@ -1245,7 +1242,7 @@ void JoinHashTable::InsertHashes(Vector &hashes_v, const idx_t count, TupleDataC
 void JoinHashTable::AllocatePointerTable() {
 	capacity = PointerTableCapacity(Count());
 	D_ASSERT(IsPowerOfTwo(capacity));
-	std::cerr << "[JoinHashTable::AllocatePointerTable] Pointer table capacity is " << capacity << std::endl;
+	DEBUG_LOG("[JoinHashTable::AllocatePointerTable] Pointer table capacity is %lu\n", (unsigned long)capacity);
 
 	if (hash_map.get()) {
 		// There is already a hash map
@@ -1330,13 +1327,13 @@ void JoinHashTable::InitializeTieredHashCache() {
 	const idx_t cache_capacity = TieredHashCache::ComputeCapacity(data_collection_row_size);
 	tiered_hash_cache = make_uniq<TieredHashCache>(cache_capacity, data_collection_row_size, row_copy_offset);
 
-	fprintf(stderr,
-	        "[InitTHC] row_size=%lu (tuple_size=%lu, pointer_offset=%lu), entry_stride=%lu, capacity=%lu, "
-	        "total=%.1f MiB\n",
-	        (unsigned long)data_collection_row_size, (unsigned long)tuple_size, (unsigned long)pointer_offset,
-	        (unsigned long)((sizeof(hash_t) + data_collection_row_size + 7) & ~idx_t(7)), (unsigned long)cache_capacity,
-	        (double)(cache_capacity * ((sizeof(hash_t) + data_collection_row_size + 7) & ~idx_t(7))) /
-	            (1024.0 * 1024.0));
+	DEBUG_LOG("[InitTHC] row_size=%lu (tuple_size=%lu, pointer_offset=%lu), entry_stride=%lu, capacity=%lu, "
+	               "total=%.1f MiB\n",
+	               (unsigned long)data_collection_row_size, (unsigned long)tuple_size, (unsigned long)pointer_offset,
+	               (unsigned long)((sizeof(hash_t) + data_collection_row_size + 7) & ~idx_t(7)),
+	               (unsigned long)cache_capacity,
+	               (double)(cache_capacity * ((sizeof(hash_t) + data_collection_row_size + 7) & ~idx_t(7))) /
+	                   (1024.0 * 1024.0));
 }
 
 void JoinHashTable::InitializeScanStructure(ScanStructure &scan_structure, DataChunk &keys,
