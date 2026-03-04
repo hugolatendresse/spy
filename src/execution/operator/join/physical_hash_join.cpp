@@ -233,7 +233,7 @@ public:
 	//! Total time spent in PhysicalHashJoin::ExecuteInternal scan_structure.Next
 	atomic<uint64_t> execute_scan_next_time_ns {0};
 	//! This is the time spend probing the THC
-	//! Does NOT include the warmup/population of THC, nor THC misses
+	//! Does NOT include the population of THC, nor THC misses
 	//! It is a subset of execute_probe_time
 	atomic<uint64_t> tiered_hash_cache_time_ns {0};
 	//! Total time spent in JoinHashTable::ProbeForPointers
