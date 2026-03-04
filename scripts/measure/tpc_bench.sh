@@ -12,6 +12,7 @@ DB_BASE_PATH=""
 RPT_FORWARD_ONLY=0
 DISABLE_TIERED_HASH_CACHE=0
 TPCH_QUERY=""
+RUNS=1
 
 usage() {
 	cat <<'USAGE'
@@ -26,6 +27,7 @@ Options:
 	--tpch-only             Run only TPC-H (default: run both TPC-H and TPC-DS)
 	--tpcds-only            Run only TPC-DS (default: run both TPC-H and TPC-DS)
 	--tpch-query <number>   Run only a specific TPC-H query (1-22, implies --tpch-only)
+	--runs <number>         Number of benchmark runs (default: 1)
 	--rpt-forward-only      Disable the RPT backward pass (forward pass only)
 	--disable-thc           Disable the tiered hash cache
 	-h, --help              Show this help
@@ -35,6 +37,7 @@ Examples:
 	scripts/run_TPC_bench.sh --generate --sf 10
 	scripts/run_TPC_bench.sh --tpch-only --sf 5
 	scripts/run_TPC_bench.sh --tpch-query 5 --sf 500
+	scripts/run_TPC_bench.sh --tpch-query 5 --sf 10 --runs 5
 	scripts/run_TPC_bench.sh --tpcds-only --sf 10
 	scripts/run_TPC_bench.sh --disable-thc --tpch-only --sf 10
 USAGE
@@ -81,6 +84,10 @@ while [[ $# -gt 0 ]]; do
 			RUN_TPCDS=0
 			shift 2
 			;;
+		--runs)
+			RUNS="$2"
+			shift 2
+			;;
 		--rpt-forward-only)
 			RPT_FORWARD_ONLY=1
 			shift
@@ -100,6 +107,11 @@ while [[ $# -gt 0 ]]; do
 			;;
 	esac
 done
+
+if ! [[ "$RUNS" =~ ^[0-9]+$ ]] || [[ "$RUNS" -lt 1 ]]; then
+	echo "Error: --runs must be a positive integer" >&2
+	exit 1
+fi
 
 if [[ -z "$DB_BASE_PATH" ]]; then
 	DB_BASE_PATH="../benchmark_data"
@@ -211,140 +223,158 @@ SQL
 	fi
 fi
 
-# ===== TPC-H Query Execution =====
+# ===== Query Execution (supports multiple runs) =====
 
-TPCH_TOTAL=0
-TPCH_WALL_SECONDS=0
+MULTIRUN_TOTAL_SECONDS=0
 
-if [[ $RUN_TPCH -eq 1 ]]; then
-	printf "query,runtime_seconds\n" > "$TPCH_CSV_PATH"
+for RUN_IDX in $(seq 1 "$RUNS"); do
+	echo "===== RUN ${RUN_IDX}/${RUNS} ====="
+	RUN_START_WALL=$(date +%s.%N)
 
-	TPCH_START_WALL=$(date +%s.%N)
+	TPCH_TOTAL=0
+	TPCH_WALL_SECONDS=0
+	TPCDS_TOTAL=0
+	TPCDS_WALL_SECONDS=0
 
-	# Determine which queries to run
-	if [[ -n "$TPCH_QUERY" ]]; then
-		if ! [[ "$TPCH_QUERY" =~ ^[0-9]+$ ]] || [[ "$TPCH_QUERY" -lt 1 ]] || [[ "$TPCH_QUERY" -gt 22 ]]; then
-			echo "Error: --tpch-query must be between 1 and 22" >&2
-			exit 1
+	# ===== TPC-H Query Execution =====
+	if [[ $RUN_TPCH -eq 1 ]]; then
+		printf "query,runtime_seconds\n" > "$TPCH_CSV_PATH"
+
+		TPCH_START_WALL=$(date +%s.%N)
+
+		# Determine which queries to run
+		if [[ -n "$TPCH_QUERY" ]]; then
+			if ! [[ "$TPCH_QUERY" =~ ^[0-9]+$ ]] || [[ "$TPCH_QUERY" -lt 1 ]] || [[ "$TPCH_QUERY" -gt 22 ]]; then
+				echo "Error: --tpch-query must be between 1 and 22" >&2
+				exit 1
+			fi
+			QUERY_RANGE="$TPCH_QUERY"
+		else
+			QUERY_RANGE=$(seq 1 22)
 		fi
-		QUERY_RANGE="$TPCH_QUERY"
-	else
-		QUERY_RANGE=$(seq 1 22)
+
+		for Q in $QUERY_RANGE; do
+			echo "Running TPC-H query ${Q}..."
+			TIME_FILE=$(mktemp)
+			ERROR_FILE=$(mktemp)
+			# Show output only when running a single specific query via --tpch-query
+			OUTPUT_REDIRECT="/dev/null"
+			if [[ -n "$TPCH_QUERY" ]]; then
+				OUTPUT_REDIRECT="/dev/stdout"
+			fi
+			if /usr/bin/time -f "%e" -o "$TIME_FILE" \
+				"$DUCKDB_BIN" "$TPCH_DB_PATH" -c "${EXTRA_SET} LOAD tpch; PRAGMA tpch(${Q});" > "$OUTPUT_REDIRECT" 2>"$ERROR_FILE"; then
+				RUNTIME=$(cat "$TIME_FILE")
+			else
+				EXIT_CODE=$?
+				echo "Error: TPC-H query ${Q} failed with exit code ${EXIT_CODE}" >&2
+				echo "Error output:" >&2
+				cat "$ERROR_FILE" >&2
+				ERROR_LOG="$OUT_DIR/tpch_q${Q}_error_${TIMESTAMP}.log"
+				cp "$ERROR_FILE" "$ERROR_LOG"
+				echo "Full error saved to: ${ERROR_LOG}" >&2
+				rm -f "$TIME_FILE" "$ERROR_FILE"
+				exit 1
+			fi
+			rm -f "$TIME_FILE" "$ERROR_FILE"
+			printf "Q%02d,%s\n" "$Q" "$RUNTIME" >> "$TPCH_CSV_PATH"
+			if [[ "$RUNTIME" != "error" ]]; then
+				TPCH_TOTAL=$(awk -v t="$TPCH_TOTAL" -v r="$RUNTIME" 'BEGIN{printf "%.6f", t + r}')
+			fi
+		done
+
+		TPCH_END_WALL=$(date +%s.%N)
+		TPCH_WALL_SECONDS=$(awk -v s="$TPCH_START_WALL" -v e="$TPCH_END_WALL" 'BEGIN{printf "%.6f", e - s}')
+
+		{
+			echo "TPC-H runtimes (sf=${SF}, run=${RUN_IDX})"
+			echo "DB: ${TPCH_DB_PATH}"
+			echo "DuckDB: ${DUCKDB_BIN}"
+			echo "Results CSV: ${TPCH_CSV_PATH}"
+			echo "Sum of per-query runtimes (s): ${TPCH_TOTAL}"
+			echo "Wall-clock time for query loop (s): ${TPCH_WALL_SECONDS}"
+		} | tee "$TPCH_TXT_PATH"
 	fi
 
-	for Q in $QUERY_RANGE; do
-		echo "Running TPC-H query ${Q}..."
-		TIME_FILE=$(mktemp)
-		ERROR_FILE=$(mktemp)
-		# Show output only when running a single specific query via --tpch-query
-		OUTPUT_REDIRECT="/dev/null"
-		if [[ -n "$TPCH_QUERY" ]]; then
-			OUTPUT_REDIRECT="/dev/stdout"
-		fi
-		if /usr/bin/time -f "%e" -o "$TIME_FILE" \
-			"$DUCKDB_BIN" "$TPCH_DB_PATH" -c "${EXTRA_SET} LOAD tpch; PRAGMA tpch(${Q});" > "$OUTPUT_REDIRECT" 2>"$ERROR_FILE"; then
-			RUNTIME=$(cat "$TIME_FILE")
-		else
-			EXIT_CODE=$?
-			echo "Error: TPC-H query ${Q} failed with exit code ${EXIT_CODE}" >&2
-			echo "Error output:" >&2
-			cat "$ERROR_FILE" >&2
-			ERROR_LOG="$OUT_DIR/tpch_q${Q}_error_${TIMESTAMP}.log"
-			cp "$ERROR_FILE" "$ERROR_LOG"
-			echo "Full error saved to: ${ERROR_LOG}" >&2
+	# ===== TPC-DS Query Execution =====
+	if [[ $RUN_TPCDS -eq 1 ]]; then
+		printf "query,runtime_seconds\n" > "$TPCDS_CSV_PATH"
+
+		TPCDS_START_WALL=$(date +%s.%N)
+
+		for Q in $(seq 1 99); do
+			echo "Running TPC-DS query ${Q}..."
+			TIME_FILE=$(mktemp)
+			ERROR_FILE=$(mktemp)
+			if /usr/bin/time -f "%e" -o "$TIME_FILE" \
+				"$DUCKDB_BIN" "$TPCDS_DB_PATH" -c "${EXTRA_SET} LOAD tpcds; PRAGMA tpcds(${Q});" > /dev/null 2>"$ERROR_FILE"; then
+				RUNTIME=$(cat "$TIME_FILE")
+			else
+				EXIT_CODE=$?
+				echo "Error: TPC-DS query ${Q} failed with exit code ${EXIT_CODE}" >&2
+				echo "Error output:" >&2
+				cat "$ERROR_FILE" >&2
+				ERROR_LOG="$OUT_DIR/tpcds_q${Q}_error_${TIMESTAMP}.log"
+				cp "$ERROR_FILE" "$ERROR_LOG"
+				echo "Full error saved to: ${ERROR_LOG}" >&2
+				rm -f "$TIME_FILE" "$ERROR_FILE"
+				exit 1
+			fi
 			rm -f "$TIME_FILE" "$ERROR_FILE"
-			exit 1
-		fi
-		rm -f "$TIME_FILE" "$ERROR_FILE"
-		printf "Q%02d,%s\n" "$Q" "$RUNTIME" >> "$TPCH_CSV_PATH"
-		if [[ "$RUNTIME" != "error" ]]; then
-			TPCH_TOTAL=$(awk -v t="$TPCH_TOTAL" -v r="$RUNTIME" 'BEGIN{printf "%.6f", t + r}')
-		fi
-	done
+			printf "Q%02d,%s\n" "$Q" "$RUNTIME" >> "$TPCDS_CSV_PATH"
+			if [[ "$RUNTIME" != "error" ]]; then
+				TPCDS_TOTAL=$(awk -v t="$TPCDS_TOTAL" -v r="$RUNTIME" 'BEGIN{printf "%.6f", t + r}')
+			fi
+		done
 
-	TPCH_END_WALL=$(date +%s.%N)
-	TPCH_WALL_SECONDS=$(awk -v s="$TPCH_START_WALL" -v e="$TPCH_END_WALL" 'BEGIN{printf "%.6f", e - s}')
+		TPCDS_END_WALL=$(date +%s.%N)
+		TPCDS_WALL_SECONDS=$(awk -v s="$TPCDS_START_WALL" -v e="$TPCDS_END_WALL" 'BEGIN{printf "%.6f", e - s}')
 
-	{
-		echo "TPC-H runtimes (sf=${SF})"
-		echo "DB: ${TPCH_DB_PATH}"
-		echo "DuckDB: ${DUCKDB_BIN}"
-		echo "Results CSV: ${TPCH_CSV_PATH}"
-		echo "Sum of per-query runtimes (s): ${TPCH_TOTAL}"
-		echo "Wall-clock time for query loop (s): ${TPCH_WALL_SECONDS}"
-	} | tee "$TPCH_TXT_PATH"
-fi
+		{
+			echo "TPC-DS runtimes (sf=${SF}, run=${RUN_IDX})"
+			echo "DB: ${TPCDS_DB_PATH}"
+			echo "DuckDB: ${DUCKDB_BIN}"
+			echo "Results CSV: ${TPCDS_CSV_PATH}"
+			echo "Sum of per-query runtimes (s): ${TPCDS_TOTAL}"
+			echo "Wall-clock time for query loop (s): ${TPCDS_WALL_SECONDS}"
+		} | tee "$TPCDS_TXT_PATH"
+	fi
 
-# ===== TPC-DS Query Execution =====
+	# ===== Combined Results for this run (if both were run) =====
+	if [[ $RUN_TPCH -eq 1 ]] && [[ $RUN_TPCDS -eq 1 ]]; then
+		COMBINED_TOTAL=$(awk -v t1="$TPCH_TOTAL" -v t2="$TPCDS_TOTAL" 'BEGIN{printf "%.6f", t1 + t2}')
+		COMBINED_WALL=$(awk -v w1="$TPCH_WALL_SECONDS" -v w2="$TPCDS_WALL_SECONDS" 'BEGIN{printf "%.6f", w1 + w2}')
 
-TPCDS_TOTAL=0
-TPCDS_WALL_SECONDS=0
+		{
+			echo "===== COMBINED RESULTS (run ${RUN_IDX}) ====="
+			echo "Scale Factor: ${SF}"
+			echo ""
+			echo "TPC-H:"
+			echo "  Sum of per-query runtimes (s): ${TPCH_TOTAL}"
+			echo "  Wall-clock time (s): ${TPCH_WALL_SECONDS}"
+			echo ""
+			echo "TPC-DS:"
+			echo "  Sum of per-query runtimes (s): ${TPCDS_TOTAL}"
+			echo "  Wall-clock time (s): ${TPCDS_WALL_SECONDS}"
+			echo ""
+			echo "TOTAL Combined:"
+			echo "  Sum of per-query runtimes (s): ${COMBINED_TOTAL}"
+			echo "  Wall-clock time (s): ${COMBINED_WALL}"
+		} | tee "$COMBINED_TXT_PATH"
+	fi
 
-if [[ $RUN_TPCDS -eq 1 ]]; then
-	printf "query,runtime_seconds\n" > "$TPCDS_CSV_PATH"
+	RUN_END_WALL=$(date +%s.%N)
+	RUN_WALL_SECONDS=$(awk -v s="$RUN_START_WALL" -v e="$RUN_END_WALL" 'BEGIN{printf "%.6f", e - s}')
+	MULTIRUN_TOTAL_SECONDS=$(awk -v t="$MULTIRUN_TOTAL_SECONDS" -v r="$RUN_WALL_SECONDS" 'BEGIN{printf "%.6f", t + r}')
 
-	TPCDS_START_WALL=$(date +%s.%N)
+	echo "Run ${RUN_IDX} total wall-clock time (s): ${RUN_WALL_SECONDS}"
+done
 
-	for Q in $(seq 1 99); do
-		echo "Running TPC-DS query ${Q}..."
-		TIME_FILE=$(mktemp)
-		ERROR_FILE=$(mktemp)
-		if /usr/bin/time -f "%e" -o "$TIME_FILE" \
-			"$DUCKDB_BIN" "$TPCDS_DB_PATH" -c "${EXTRA_SET} LOAD tpcds; PRAGMA tpcds(${Q});" > /dev/null 2>"$ERROR_FILE"; then
-			RUNTIME=$(cat "$TIME_FILE")
-		else
-			EXIT_CODE=$?
-			echo "Error: TPC-DS query ${Q} failed with exit code ${EXIT_CODE}" >&2
-			echo "Error output:" >&2
-			cat "$ERROR_FILE" >&2
-			ERROR_LOG="$OUT_DIR/tpcds_q${Q}_error_${TIMESTAMP}.log"
-			cp "$ERROR_FILE" "$ERROR_LOG"
-			echo "Full error saved to: ${ERROR_LOG}" >&2
-			rm -f "$TIME_FILE" "$ERROR_FILE"
-			exit 1
-		fi
-		rm -f "$TIME_FILE" "$ERROR_FILE"
-		printf "Q%02d,%s\n" "$Q" "$RUNTIME" >> "$TPCDS_CSV_PATH"
-		if [[ "$RUNTIME" != "error" ]]; then
-			TPCDS_TOTAL=$(awk -v t="$TPCDS_TOTAL" -v r="$RUNTIME" 'BEGIN{printf "%.6f", t + r}')
-		fi
-	done
+MULTIRUN_AVERAGE_SECONDS=$(awk -v t="$MULTIRUN_TOTAL_SECONDS" -v n="$RUNS" 'BEGIN{printf "%.6f", t / n}')
 
-	TPCDS_END_WALL=$(date +%s.%N)
-	TPCDS_WALL_SECONDS=$(awk -v s="$TPCDS_START_WALL" -v e="$TPCDS_END_WALL" 'BEGIN{printf "%.6f", e - s}')
-
-	{
-		echo "TPC-DS runtimes (sf=${SF})"
-		echo "DB: ${TPCDS_DB_PATH}"
-		echo "DuckDB: ${DUCKDB_BIN}"
-		echo "Results CSV: ${TPCDS_CSV_PATH}"
-		echo "Sum of per-query runtimes (s): ${TPCDS_TOTAL}"
-		echo "Wall-clock time for query loop (s): ${TPCDS_WALL_SECONDS}"
-	} | tee "$TPCDS_TXT_PATH"
-fi
-
-# ===== Combined Results (if both were run) =====
-
-if [[ $RUN_TPCH -eq 1 ]] && [[ $RUN_TPCDS -eq 1 ]]; then
-	COMBINED_TOTAL=$(awk -v t1="$TPCH_TOTAL" -v t2="$TPCDS_TOTAL" 'BEGIN{printf "%.6f", t1 + t2}')
-	COMBINED_WALL=$(awk -v w1="$TPCH_WALL_SECONDS" -v w2="$TPCDS_WALL_SECONDS" 'BEGIN{printf "%.6f", w1 + w2}')
-
-	{
-		echo "===== COMBINED RESULTS ====="
-		echo "Scale Factor: ${SF}"
-		echo ""
-		echo "TPC-H:"
-		echo "  Sum of per-query runtimes (s): ${TPCH_TOTAL}"
-		echo "  Wall-clock time (s): ${TPCH_WALL_SECONDS}"
-		echo ""
-		echo "TPC-DS:"
-		echo "  Sum of per-query runtimes (s): ${TPCDS_TOTAL}"
-		echo "  Wall-clock time (s): ${TPCDS_WALL_SECONDS}"
-		echo ""
-		echo "TOTAL Combined:"
-		echo "  Sum of per-query runtimes (s): ${COMBINED_TOTAL}"
-		echo "  Wall-clock time (s): ${COMBINED_WALL}"
-	} | tee "$COMBINED_TXT_PATH"
-fi
+echo "===== MULTI-RUN SUMMARY ====="
+echo "Total time (s): ${MULTIRUN_TOTAL_SECONDS}"
+echo "Number of runs: ${RUNS}"
+echo "Average time per run (s): ${MULTIRUN_AVERAGE_SECONDS}"
 
 echo "Done."
