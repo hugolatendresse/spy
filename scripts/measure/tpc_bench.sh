@@ -15,6 +15,9 @@ DISABLE_TIERED_HASH_CACHE=0
 TPCH_QUERY=""
 RUNS=1
 
+# Track which options were explicitly passed
+PASSED_OPTIONS=()
+
 usage() {
 	cat <<'USAGE'
 Usage: scripts/run_TPC_bench.sh [options]
@@ -52,54 +55,66 @@ while [[ $# -gt 0 ]]; do
 	case "$1" in
 		--sf)
 			SF="$2"
+			PASSED_OPTIONS+=("--sf $2")
 			shift 2
 			;;
 		--db)
 			DB_BASE_PATH="$2"
+			PASSED_OPTIONS+=("--db $2")
 			shift 2
 			;;
 		--duckdb)
 			DUCKDB_BIN="$2"
+			PASSED_OPTIONS+=("--duckdb $2")
 			shift 2
 			;;
 		--generate)
 			GENERATE_DATA=1
+			PASSED_OPTIONS+=("--generate")
 			shift
 			;;
 		--out-dir)
 			OUT_DIR="$2"
+			PASSED_OPTIONS+=("--out-dir $2")
 			shift 2
 			;;
 		--tpch-only)
 			RUN_TPCH=1
 			RUN_TPCDS=0
+			PASSED_OPTIONS+=("--tpch-only")
 			shift
 			;;
 		--tpcds-only)
 			RUN_TPCH=0
 			RUN_TPCDS=1
+			PASSED_OPTIONS+=("--tpcds-only")
 			shift
 			;;
 		--tpch-query)
 			TPCH_QUERY="$2"
 			RUN_TPCH=1
 			RUN_TPCDS=0
+			PASSED_OPTIONS+=("--tpch-query $2")
 			shift 2
 			;;
 		--runs)
 			RUNS="$2"
+			PASSED_OPTIONS+=("--runs $2")
 			shift 2
 			;;
 		--rpt-forward-only)
 			RPT_FORWARD_ONLY=1
+			PASSED_OPTIONS+=("--rpt-forward-only")
 			shift
 			;;
 		--disable-rpt)
 			DISABLE_RPT=1
+			PASSED_OPTIONS+=("--disable-rpt")
 			shift
 			;;
 		--disable-thc)
 			DISABLE_TIERED_HASH_CACHE=1
+			PASSED_OPTIONS+=("--disable-thc")
 			shift
 			;;
 		-h|--help)
@@ -136,9 +151,10 @@ mkdir -p "$OUT_DIR"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 # Build optional SET prefix
-EXTRA_SET=""
+# Always use 4 threads for reproducible benchmarks
+EXTRA_SET="SET threads = 4;"
 if [[ $DISABLE_RPT -eq 1 ]]; then
-	EXTRA_SET="SET disable_rpt = true;"
+	EXTRA_SET="${EXTRA_SET} SET disable_rpt = true;"
 fi
 if [[ $RPT_FORWARD_ONLY -eq 1 ]]; then
 	EXTRA_SET="SET rpt_forward_only = true;"
@@ -381,9 +397,17 @@ done
 
 MULTIRUN_AVERAGE_SECONDS=$(awk -v t="$MULTIRUN_TOTAL_SECONDS" -v n="$RUNS" 'BEGIN{printf "%.6f", t / n}')
 
+echo ""
+echo "===== COMMAND LINE OPTIONS USED ====="
+if [[ ${#PASSED_OPTIONS[@]} -gt 0 ]]; then
+	for opt in "${PASSED_OPTIONS[@]}"; do
+		echo "  $opt"
+	done
+else
+	echo "  (none - all defaults)"
+fi
+
 echo "===== MULTI-RUN SUMMARY ====="
 echo "Total time (s): ${MULTIRUN_TOTAL_SECONDS}"
 echo "Number of runs: ${RUNS}"
 echo "Average time per run (s): ${MULTIRUN_AVERAGE_SECONDS}"
-
-echo "Done."

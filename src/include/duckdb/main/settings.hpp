@@ -586,6 +586,46 @@ struct DisableTieredHashCacheSetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
+struct ThcL3BudgetSetting {
+	using RETURN_TYPE = int64_t;
+	static constexpr const char *Name = "thc_l3_budget";
+	static constexpr const char *Description = "Memory budget in bytes for the Tiered Hash Cache (default: 6 MiB)";
+	static constexpr const char *InputType = "BIGINT";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct ThcCollectPhaseRowsSetting {
+	using RETURN_TYPE = int64_t;
+	static constexpr const char *Name = "thc_collect_phase_rows";
+	static constexpr const char *Description = "Number of probe-side rows per THC collect phase (default: 200000)";
+	static constexpr const char *InputType = "BIGINT";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct ThcMissThresholdSetting {
+	using RETURN_TYPE = double;
+	static constexpr const char *Name = "thc_miss_threshold";
+	static constexpr const char *Description = "THC miss rate threshold below which collect phases are skipped (default: 0.10)";
+	static constexpr const char *InputType = "DOUBLE";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct ThcActivationThresholdSetting {
+	using RETURN_TYPE = int64_t;
+	static constexpr const char *Name = "thc_activation_threshold";
+	static constexpr const char *Description = "Minimum HT capacity (entries) to activate the THC (default: ~1.3M)";
+	static constexpr const char *InputType = "BIGINT";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
 struct EnableHTTPMetadataCacheSetting {
 	using RETURN_TYPE = bool;
 	static constexpr const char *Name = "enable_http_metadata_cache";

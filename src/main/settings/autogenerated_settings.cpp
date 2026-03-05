@@ -567,6 +567,74 @@ Value DisableTieredHashCacheSetting::GetSetting(const ClientContext &context) {
 }
 
 //===----------------------------------------------------------------------===//
+// THC L3 Budget
+//===----------------------------------------------------------------------===//
+void ThcL3BudgetSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.thc_budget_bytes = static_cast<idx_t>(input.GetValue<int64_t>());
+}
+
+void ThcL3BudgetSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).thc_budget_bytes = ClientConfig().thc_budget_bytes;
+}
+
+Value ThcL3BudgetSetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::BIGINT(static_cast<int64_t>(config.thc_budget_bytes));
+}
+
+//===----------------------------------------------------------------------===//
+// THC Collect Phase Rows
+//===----------------------------------------------------------------------===//
+void ThcCollectPhaseRowsSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.thc_collect_phase_rows = static_cast<idx_t>(input.GetValue<int64_t>());
+}
+
+void ThcCollectPhaseRowsSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).thc_collect_phase_rows = ClientConfig().thc_collect_phase_rows;
+}
+
+Value ThcCollectPhaseRowsSetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::BIGINT(static_cast<int64_t>(config.thc_collect_phase_rows));
+}
+
+//===----------------------------------------------------------------------===//
+// THC Miss Threshold
+//===----------------------------------------------------------------------===//
+void ThcMissThresholdSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.thc_miss_threshold = input.GetValue<double>();
+}
+
+void ThcMissThresholdSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).thc_miss_threshold = ClientConfig().thc_miss_threshold;
+}
+
+Value ThcMissThresholdSetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::DOUBLE(config.thc_miss_threshold);
+}
+
+//===----------------------------------------------------------------------===//
+// THC Activation Threshold
+//===----------------------------------------------------------------------===//
+void ThcActivationThresholdSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.thc_activation_threshold = static_cast<idx_t>(input.GetValue<int64_t>());
+}
+
+void ThcActivationThresholdSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).thc_activation_threshold = ClientConfig().thc_activation_threshold;
+}
+
+Value ThcActivationThresholdSetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::BIGINT(static_cast<int64_t>(config.thc_activation_threshold));
+}
+
+//===----------------------------------------------------------------------===//
 // Enable H T T P Metadata Cache
 //===----------------------------------------------------------------------===//
 void EnableHTTPMetadataCacheSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
