@@ -152,7 +152,7 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 # Build optional SET prefix
 # For reproducible benchmarks, always use four threads and pinned them 
-EXTRA_SET="SET threads = 4; SET pin_threads = 'on';"
+EXTRA_SET="SET threads = 4; SET pin_threads = 'on'; SET thc_l3_budget = 4194304; SET thc_collect_phase_rows = 100000; SET thc_collect_budget_fraction = 0.02; SET thc_miss_threshold = 0.05; SET thc_activation_threshold = 500000;"
 if [[ $DISABLE_RPT -eq 1 ]]; then
 	EXTRA_SET="${EXTRA_SET} SET disable_rpt = true;"
 fi
