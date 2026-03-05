@@ -136,9 +136,9 @@ mkdir -p "$OUT_DIR"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 # Build optional SET prefix
-EXTRA_SET=""
+EXTRA_SET="SET pin_threads = 'on';"
 if [[ $DISABLE_RPT -eq 1 ]]; then
-	EXTRA_SET="SET disable_rpt = true;"
+	EXTRA_SET="${EXTRA_SET} SET disable_rpt = true;"
 fi
 if [[ $RPT_FORWARD_ONLY -eq 1 ]]; then
 	EXTRA_SET="SET rpt_forward_only = true;"
