@@ -535,16 +535,16 @@ Value RptForwardOnlySetting::GetSetting(const ClientContext &context) {
 //===----------------------------------------------------------------------===//
 // Disable RPT
 //===----------------------------------------------------------------------===//
-void RptForwardOnlySetting::SetLocal(ClientContext &context, const Value &input) {
+void DisableRptSetting::SetLocal(ClientContext &context, const Value &input) {
 	auto &config = ClientConfig::GetConfig(context);
 	config.disable_rpt = input.GetValue<bool>();
 }
 
-void RptForwardOnlySetting::ResetLocal(ClientContext &context) {
+void DisableRptSetting::ResetLocal(ClientContext &context) {
 	ClientConfig::GetConfig(context).disable_rpt = ClientConfig().disable_rpt;
 }
 
-Value RptForwardOnlySetting::GetSetting(const ClientContext &context) {
+Value DisableRptSetting::GetSetting(const ClientContext &context) {
 	auto &config = ClientConfig::GetConfig(context);
 	return Value::BOOLEAN(config.disable_rpt);
 }

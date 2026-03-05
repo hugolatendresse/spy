@@ -108,6 +108,7 @@ static const ConfigurationOption internal_options[] = {
     DUCKDB_LOCAL(EnableHTTPLoggingSetting),
     DUCKDB_GLOBAL(EnableHTTPMetadataCacheSetting),
     DUCKDB_LOCAL(RptForwardOnlySetting),
+    DUCKDB_LOCAL(DisableRptSetting),
 	DUCKDB_LOCAL(DisableTieredHashCacheSetting),
     DUCKDB_GLOBAL(EnableLogging),
     DUCKDB_GLOBAL(EnableMacroDependenciesSetting),

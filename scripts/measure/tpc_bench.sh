@@ -95,7 +95,7 @@ while [[ $# -gt 0 ]]; do
 			shift
 			;;
 		--disable-rpt)
-			DISABLE-RPT=1
+			DISABLE_RPT=1
 			shift
 			;;
 		--disable-thc)

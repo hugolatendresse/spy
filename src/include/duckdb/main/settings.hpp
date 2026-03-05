@@ -566,7 +566,7 @@ struct RptForwardOnlySetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
-struct RptForwardOnlySetting {
+struct DisableRptSetting {
 	using RETURN_TYPE = bool;
 	static constexpr const char *Name = "disable_rpt";
 	static constexpr const char *Description = "When enabled, neither the forward pass nor the backward pass of RPT+ are executed (both are skipped)";
