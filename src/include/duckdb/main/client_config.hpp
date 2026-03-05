@@ -74,6 +74,8 @@ struct ClientConfig {
 	bool enable_optimizer = true;
 	//! When true, only the forward pass of RPT+ is executed (backward pass is skipped)
 	bool rpt_forward_only = false;
+	//! When true, all of RPT+ is disable (both forward and backware passes are skipped)
+	bool disable_rpt = false;
 	//! When true, skip initializing the tiered hash cache
 	bool disable_tiered_hash_cache = false;
 	//! Enable caching operators
