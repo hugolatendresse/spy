@@ -151,8 +151,8 @@ mkdir -p "$OUT_DIR"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 # Build optional SET prefix
-# Always use 4 threads for reproducible benchmarks
-EXTRA_SET="SET threads = 4;"
+# For reproducible benchmarks, always use four threads and pinned them 
+EXTRA_SET="SET threads = 4; SET pin_threads = 'on';"
 if [[ $DISABLE_RPT -eq 1 ]]; then
 	EXTRA_SET="${EXTRA_SET} SET disable_rpt = true;"
 fi
