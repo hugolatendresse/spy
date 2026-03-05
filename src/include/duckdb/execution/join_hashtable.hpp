@@ -191,11 +191,6 @@ public:
 	//! (those typically have 80-94% miss rates).
 	static constexpr idx_t THC_ABANDON_CONSECUTIVE_MISSES = 1;
 
-	struct CollectedEntry {
-		hash_t hash;
-		const_data_ptr_t row_ptr;
-	};
-
 	//! There is one instance of this per thread at runtime
 	struct ProbeState : SharedState {
 		ProbeState();
@@ -243,9 +238,11 @@ public:
 		//! Rows processed in the current collect phase (reset each time we enter COLLECT)
 		idx_t probe_rows_in_phase = 0;
 
-		//! Buffer of {hash, row_ptr} pairs collected.
+		//! Bitvector over the HT slots (one bit per slot, indexed by slot number).
+		//! Bit i is set when slot i in the HT was a THC miss during this collect phase.
 		//! Flushed into the shared THC when probe_rows_in_phase >= COLLECT_PHASE_PROBE_ROWS.
-		vector<CollectedEntry> collected_entries;
+		//! Stored as a vector of uint64_t words; iterating and skipping zero words is fast.
+		vector<uint64_t> ht_miss_bits;
 
 		//! How many checkpoints (end-of-READ_ONLY evaluations) have occurred.
 		//! The READ_ONLY segment length is READ_ONLY_BASE_ROWS * 2^checkpoint_count.
