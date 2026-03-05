@@ -3,7 +3,7 @@
 
 -- https://duckdb.org/docs/stable/dev/profiling
 PRAGMA enable_profiling = 'json';
-PRAGMA profiling_output = 'no_thc.json';
+PRAGMA profiling_output = 'tpch5.json';
 PRAGMA profiling_coverage = 'SELECT';
 -- PRAGMA profiling_mode = 'detailed';
 
