@@ -606,6 +606,17 @@ struct ThcCollectPhaseRowsSetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
+struct ThcCollectBudgetFractionSetting {
+	using RETURN_TYPE = double;
+	static constexpr const char *Name = "thc_collect_budget_fraction";
+	static constexpr const char *Description =
+	    "Maximum fraction of probe rows that can be spent in THC collect phases (default: 0.02)";
+	static constexpr const char *InputType = "DOUBLE";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
 struct ThcMissThresholdSetting {
 	using RETURN_TYPE = double;
 	static constexpr const char *Name = "thc_miss_threshold";

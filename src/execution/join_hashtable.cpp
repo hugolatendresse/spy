@@ -47,6 +47,7 @@ JoinHashTable::JoinHashTable(ClientContext &context_p, const vector<JoinConditio
 	auto &config = ClientConfig::GetConfig(context);
 	thc_budget_bytes = config.thc_budget_bytes;
 	thc_collect_phase_rows = config.thc_collect_phase_rows;
+	thc_collect_budget_fraction = config.thc_collect_budget_fraction;
 	thc_miss_threshold = config.thc_miss_threshold;
 	thc_activation_threshold = config.thc_activation_threshold;
 	for (idx_t i = 0; i < conditions.size(); ++i) {
@@ -866,10 +867,11 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 
 		// Check whether we can afford another collect phase within the total budget.
 		// We project the cost of the next COLLECT_PHASE_PROBE_ROWS and check if
-		// total_collect_phase_rows + COLLECT_PHASE_PROBE_ROWS stays within the budget.
+		// total_collect_phase_rows + COLLECT_PHASE_PROBE_ROWS stays within the
+		// configured fraction budget.
 		const bool budget_ok =
 		    (state.total_collect_phase_rows + thc_collect_phase_rows) <=
-		    static_cast<idx_t>(static_cast<double>(state.total_probe_rows) * COLLECT_BUDGET_FRACTION);
+		    static_cast<idx_t>(static_cast<double>(state.total_probe_rows) * thc_collect_budget_fraction);
 
 		// Check whether the THC has room for new entries
 		const bool thc_full = tiered_hash_cache->IsFull();

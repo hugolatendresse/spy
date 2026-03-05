@@ -85,6 +85,9 @@ struct ClientConfig {
 	//! Number of probe-side rows processed per THC collect phase.
 	//! Smaller values mean faster warm-up but more frequent collect/flush cycles.
 	idx_t thc_collect_phase_rows = 200000;
+	//! Maximum fraction of probe rows that can be spent in THC collect phases.
+	//! Example: 0.02 means collect overhead is capped at 2% of probe rows.
+	double thc_collect_budget_fraction = 0.02;
 	//! THC miss rate threshold (0.0–1.0). If the miss rate in a READ_ONLY
 	//! segment is below this, we skip the next collect phase.
 	double thc_miss_threshold = 0.10;

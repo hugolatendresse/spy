@@ -157,7 +157,7 @@ public:
 	//! Number of probe-side rows each thread processes during a single collect phase.
 	//! Each collect phase has a fixed row budget. The number of collect phases is
 	//! controlled by the adaptive logic so that the row count across all collect phases
-	//! stays within COLLECT_BUDGET_FRACTION of total probe rows.
+	//! stays within thc_collect_budget_fraction of total probe rows.
 	static constexpr idx_t COLLECT_PHASE_PROBE_ROWS = 200000;
 
 	//! Initial length of the first READ_ONLY segment (in probe rows).
@@ -165,10 +165,10 @@ public:
 	//! so that collection overhead decreases over time.
 	static constexpr idx_t READ_ONLY_BASE_ROWS = COLLECT_PHASE_PROBE_ROWS;
 
-	//! Maximum fraction of total probe rows that may be spent in collect phases.
-	//! Once total_collect_phase_rows exceeds total_probe_rows * COLLECT_BUDGET_FRACTION,
-	//! no further collect phases will be entered.
-	static constexpr double COLLECT_BUDGET_FRACTION = 0.02;
+	//! Default maximum fraction of total probe rows that may be spent in collect
+	//! phases. The runtime value is configurable per session through
+	//! `thc_collect_budget_fraction`.
+	static constexpr double DEFAULT_COLLECT_BUDGET_FRACTION = 0.02;
 
 	//! If the THC miss rate during a READ_ONLY phase is below this threshold,
 	//! we skip the next collect phase. The THC is already serving most probe
@@ -267,8 +267,8 @@ public:
 		idx_t ro_total_count = 0;
 
 		//! Lifetime count of rows spent in collect phases across all cycles.
-		//! Compared against total_probe_rows * COLLECT_BUDGET_FRACTION to enforce
-		//! the 2% overhead cap.
+		//! Compared against total_probe_rows * thc_collect_budget_fraction to enforce
+		//! the configured collect overhead cap.
 		idx_t total_collect_phase_rows = 0;
 
 		//! Lifetime count of all probe rows processed by this thread.
@@ -490,6 +490,8 @@ private:
 	idx_t thc_budget_bytes;
 	//! Number of probe rows per collect phase before flushing to the THC.
 	idx_t thc_collect_phase_rows;
+	//! Maximum fraction of probe rows that can be spent in collect phases.
+	double thc_collect_budget_fraction;
 	//! Miss rate threshold for skipping collect phases.
 	double thc_miss_threshold;
 	//! Minimum HT capacity to activate the THC.

@@ -601,6 +601,23 @@ Value ThcCollectPhaseRowsSetting::GetSetting(const ClientContext &context) {
 }
 
 //===----------------------------------------------------------------------===//
+// THC Collect Budget Fraction
+//===----------------------------------------------------------------------===//
+void ThcCollectBudgetFractionSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.thc_collect_budget_fraction = input.GetValue<double>();
+}
+
+void ThcCollectBudgetFractionSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).thc_collect_budget_fraction = ClientConfig().thc_collect_budget_fraction;
+}
+
+Value ThcCollectBudgetFractionSetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::DOUBLE(config.thc_collect_budget_fraction);
+}
+
+//===----------------------------------------------------------------------===//
 // THC Miss Threshold
 //===----------------------------------------------------------------------===//
 void ThcMissThresholdSetting::SetLocal(ClientContext &context, const Value &input) {
