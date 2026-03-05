@@ -681,6 +681,11 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 	// =================================================================
 	if (state.tiered_hash_cache_phase == TieredHashCachePhase::COLLECT) {
 
+		// Lazy-init the bitvector on first use (one bit per HT slot).
+		if (state.ht_miss_bits.empty()) {
+			state.ht_miss_bits.assign((capacity + 63) / 64, 0);
+		}
+
 		if (state.cycle_count == 0) {
 			// ----------------------------------------------------------
 			// First collect phase (cycle 0): THC is empty, use regular DuckDB probe.
@@ -713,15 +718,12 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 				                              pointers_result_v, match_sel, has_sel);
 			}
 
-			// Collect every matched row as a collected entry so that the first
+			// Mark every matched row's HT slot in the miss bitvector so the first
 			// THC population covers the broadest possible set of hot keys.
-			auto pointers_result = FlatVector::GetData<data_ptr_t>(pointers_result_v);
 			for (idx_t i = 0; i < count; i++) {
 				const auto row_index = match_sel.get_index(i);
-				const auto hash = saved_hashes[row_index];
-				if (hash != 0) {
-					state.collected_entries.push_back({hash, pointers_result[row_index]});
-				}
+				const auto slot = saved_hashes[row_index] & bitmask;
+				state.ht_miss_bits[slot / 64] |= (uint64_t(1) << (slot % 64));
 			}
 
 		} else {
@@ -751,17 +753,14 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 			//
 			// Fix: read hashes directly from hashes_v, which is preserved by
 			// ProbeTHCAndFallback (only Flatten or ToUnifiedFormat, no data mutation).
-			auto pointers_result = FlatVector::GetData<data_ptr_t>(pointers_result_v);
 			if (!has_sel) {
 				// hashes_v was Flattened in ProbeTHCAndFallback step 1.
 				// Row index == flat index, so direct indexing is correct.
 				auto hashes_flat = FlatVector::GetData<hash_t>(hashes_v);
 				for (idx_t i = 0; i < state.thc_miss_match_count; i++) {
 					const auto row_index = state.thc_miss_match_sel.get_index(i);
-					const auto hash = hashes_flat[row_index];
-					if (hash != 0) {
-						state.collected_entries.push_back({hash, pointers_result[row_index]});
-					}
+					const auto slot = hashes_flat[row_index] & bitmask;
+					state.ht_miss_bits[slot / 64] |= (uint64_t(1) << (slot % 64));
 				}
 			} else {
 				// hashes_v is in its original format; use UnifiedVectorFormat.
@@ -771,10 +770,8 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 				for (idx_t i = 0; i < state.thc_miss_match_count; i++) {
 					const auto row_index = state.thc_miss_match_sel.get_index(i);
 					const auto uvf_index = hashes_uf.sel->get_index(row_index);
-					const auto hash = hashes_src[uvf_index];
-					if (hash != 0) {
-						state.collected_entries.push_back({hash, pointers_result[row_index]});
-					}
+					const auto slot = hashes_src[uvf_index] & bitmask;
+					state.ht_miss_bits[slot / 64] |= (uint64_t(1) << (slot % 64));
 				}
 			}
 		}
@@ -789,11 +786,21 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 		// to READ_ONLY with the appropriate exponential backoff target.
 		// ----------------------------------------------------------
 		if (state.probe_rows_in_phase >= thc_collect_phase_rows) {
-			// Insert all collected entries into the shared THC.
+			// Iterate the bitvector and insert each marked HT slot into the shared THC.
+			// Skipping zero words avoids touching cold cache lines.
 			// The THC's CAS-based Insert is thread-safe and silently
 			// drops entries if the table is full or has hash collisions.
-			for (auto &entry : state.collected_entries) {
-				tiered_hash_cache->Insert(entry.hash, entry.row_ptr);
+			idx_t bit_count = 0;
+			for (idx_t word_idx = 0; word_idx < state.ht_miss_bits.size(); word_idx++) {
+				uint64_t word = state.ht_miss_bits[word_idx];
+				while (word != 0) {
+					const int bit_pos = __builtin_ctzll(word);
+					const idx_t slot = word_idx * 64 + static_cast<idx_t>(bit_pos);
+					const hash_t hash = (entries[slot].GetSalt() & ht_entry_t::SALT_MASK) | slot;
+					tiered_hash_cache->Insert(hash, entries[slot].GetPointerOrNull());
+					word &= word - 1; // clear lowest set bit
+					bit_count++;
+				}
 			}
 
 			DEBUG_LOG("[Collect->Read-Only] cycle=%lu, probe_rows_in_phase=%lu, buffered=%lu, "
@@ -801,7 +808,7 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 			               "total_collect_phase_rows=%lu, total_probe=%lu (%.2f%%)\n",
 			               (unsigned long)state.cycle_count,
 			               (unsigned long)state.probe_rows_in_phase,
-			               (unsigned long)state.collected_entries.size(),
+			               (unsigned long)bit_count,
 			               (unsigned long)tiered_hash_cache->insert_new.load(),
 			               (unsigned long)tiered_hash_cache->GetCapacity(),
 			               (unsigned long)tiered_hash_cache->insert_new.load(),
@@ -813,9 +820,8 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 			                         static_cast<double>(state.total_probe_rows)
 			                   : 0.0);
 
-			// Free the collection buffer
-			state.collected_entries.clear();
-			state.collected_entries.shrink_to_fit();
+			// Zero out the bitvector for the next collect phase (keep allocation alive).
+			std::fill(state.ht_miss_bits.begin(), state.ht_miss_bits.end(), 0);
 
 			// Transition to READ_ONLY with exponentially growing target.
 			// The first READ_ONLY segment uses READ_ONLY_BASE_ROWS.
@@ -915,7 +921,7 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 			// Enter COLLECT phase: reset per-phase state
 			state.tiered_hash_cache_phase = TieredHashCachePhase::COLLECT;
 			state.probe_rows_in_phase = 0;
-			state.collected_entries.clear();
+			std::fill(state.ht_miss_bits.begin(), state.ht_miss_bits.end(), 0);
 		} else {
 			// Stay in READ_ONLY with a doubled target.
 			// Reset segment counters for the next checkpoint evaluation.
