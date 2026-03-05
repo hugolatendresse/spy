@@ -533,6 +533,23 @@ Value RptForwardOnlySetting::GetSetting(const ClientContext &context) {
 }
 
 //===----------------------------------------------------------------------===//
+// Disable RPT
+//===----------------------------------------------------------------------===//
+void RptForwardOnlySetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.disable_rpt = input.GetValue<bool>();
+}
+
+void RptForwardOnlySetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).disable_rpt = ClientConfig().disable_rpt;
+}
+
+Value RptForwardOnlySetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::BOOLEAN(config.disable_rpt);
+}
+
+//===----------------------------------------------------------------------===//
 // Disable Tiered Hash Cache
 //===----------------------------------------------------------------------===//
 void DisableTieredHashCacheSetting::SetLocal(ClientContext &context, const Value &input) {

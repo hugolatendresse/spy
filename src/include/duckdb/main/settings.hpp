@@ -566,6 +566,16 @@ struct RptForwardOnlySetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
+struct RptForwardOnlySetting {
+	using RETURN_TYPE = bool;
+	static constexpr const char *Name = "disable_rpt";
+	static constexpr const char *Description = "When enabled, neither the forward pass nor the backward pass of RPT+ are executed (both are skipped)";
+	static constexpr const char *InputType = "BOOLEAN";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
 struct DisableTieredHashCacheSetting {
 	using RETURN_TYPE = bool;
 	static constexpr const char *Name = "disable_tiered_hash_cache";
