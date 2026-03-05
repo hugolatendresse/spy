@@ -157,7 +157,7 @@ public:
 	//! Number of probe-side rows each thread processes during a single collect phase.
 	//! Each collect phase has a fixed row budget. The number of collect phases is
 	//! controlled by the adaptive logic so that the row count across all collect phases
-	//! stays within COLLECT_BUDGET_FRACTION of total probe rows.
+	//! stays within thc_collect_budget_fraction of total probe rows.
 	static constexpr idx_t COLLECT_PHASE_PROBE_ROWS = 200000;
 
 	//! Initial length of the first READ_ONLY segment (in probe rows).
@@ -165,15 +165,31 @@ public:
 	//! so that collection overhead decreases over time.
 	static constexpr idx_t READ_ONLY_BASE_ROWS = COLLECT_PHASE_PROBE_ROWS;
 
-	//! Maximum fraction of total probe rows that may be spent in collect phases.
-	//! Once total_collect_phase_rows exceeds total_probe_rows * COLLECT_BUDGET_FRACTION,
-	//! no further collect phases will be entered.
-	static constexpr double COLLECT_BUDGET_FRACTION = 0.02;
+	//! Default maximum fraction of total probe rows that may be spent in collect
+	//! phases. The runtime value is configurable per session through
+	//! `thc_collect_budget_fraction`.
+	static constexpr double DEFAULT_COLLECT_BUDGET_FRACTION = 0.02;
 
 	//! If the THC miss rate during a READ_ONLY phase is below this threshold,
 	//! we skip the next collect phase. The THC is already serving most probe
 	//! rows effectively and refreshing it would waste CPU time.
 	static constexpr double THC_MISS_SKIP_THRESHOLD = 0.10;
+
+	//! If the miss rate is above this threshold, the THC is clearly not
+	//! helping and we count it toward abandonment. Once we see this many
+	//! consecutive high-miss checkpoints, the thread permanently stops
+	//! probing the THC.
+	//! Set to 95% — the THC can still save net time even at 90%+ miss rates
+	//! because each hit completely avoids data_collection access (expensive
+	//! LLC misses). Only abandon when nearly every probe misses.
+	static constexpr double THC_ABANDON_MISS_THRESHOLD = 0.95;
+	//! Set to 1 — abandon at the very first checkpoint where miss rate exceeds
+	//! the threshold. This minimises the overhead of the initial COLLECT +
+	//! READ_ONLY phases for joins where the THC is clearly too small.
+	//! A value of 1 (rather than 2) is safe because the 95% threshold already
+	//! provides sufficient margin for joins that truly benefit from the THC
+	//! (those typically have 80-94% miss rates).
+	static constexpr idx_t THC_ABANDON_CONSECUTIVE_MISSES = 1;
 
 	struct CollectedEntry {
 		hash_t hash;
@@ -206,6 +222,18 @@ public:
 		//! Current phase of the adaptive THC lifecycle
 		TieredHashCachePhase tiered_hash_cache_phase = TieredHashCachePhase::COLLECT;
 
+		//! When true, this thread has permanently abandoned the THC because
+		//! the miss rate remained high even after the THC was full.
+		//! All subsequent probes bypass the THC entirely and use the vanilla
+		//! DuckDB path, eliminating the per-probe overhead of hash densification,
+		//! ProbeAndMatch, and fallback bookkeeping.
+		bool thc_abandoned = false;
+
+		//! Number of consecutive READ_ONLY checkpoints where the miss rate
+		//! was above the abandon threshold.  Once this reaches
+		//! THC_ABANDON_CONSECUTIVE_MISSES, the THC is permanently abandoned.
+		idx_t consecutive_high_miss_checkpoints = 0;
+
 		//! How many collect -> read-only transitions have occurred so far.
 		//! cycle_count == 0 means we are still in the very first collect phase.
 		//! On cycle 0, we use the regular DuckDB probe and save all matches.
@@ -216,7 +244,7 @@ public:
 		idx_t probe_rows_in_phase = 0;
 
 		//! Buffer of {hash, row_ptr} pairs collected.
-		//! Flushed into the shared THC when probe_rows_in_phase >= COLLECT_PHASE_ROWS.
+		//! Flushed into the shared THC when probe_rows_in_phase >= COLLECT_PHASE_PROBE_ROWS.
 		vector<CollectedEntry> collected_entries;
 
 		//! How many checkpoints (end-of-READ_ONLY evaluations) have occurred.
@@ -239,8 +267,8 @@ public:
 		idx_t ro_total_count = 0;
 
 		//! Lifetime count of rows spent in collect phases across all cycles.
-		//! Compared against total_probe_rows * COLLECT_BUDGET_FRACTION to enforce
-		//! the 2% overhead cap.
+		//! Compared against total_probe_rows * thc_collect_budget_fraction to enforce
+		//! the configured collect overhead cap.
 		idx_t total_collect_phase_rows = 0;
 
 		//! Lifetime count of all probe rows processed by this thread.
@@ -260,10 +288,6 @@ public:
 
 		//! Count of entries in thc_miss_match_sel
 		idx_t thc_miss_match_count = 0;
-
-		//! Maps row_index -> dense index in hashes_dense for THC-miss rows.
-		//! Needed to recover the original hash for insertion into the THC.
-		idx_t thc_miss_dense_index[STANDARD_VECTOR_SIZE] = {};
 	};
 
 	struct InsertState : SharedState {
@@ -422,7 +446,9 @@ private:
 	//! GetRowPointersInternal for misses, and returns the combined match results.
 	//! On return, match_count and cache_miss_count are set.
 	//! When called from COLLECT (cycle > 0), the caller reads state.thc_miss_match_sel
-	//! and state.thc_miss_match_count to find which miss-fallback rows found a match.
+	//! and state.thc_miss_match_count to find which miss-fallback rows found a match,
+	//! and reads hashes directly from hashes_v (not hashes_dense_v, which is overwritten
+	//! by GetRowPointersInternal during fallback).
 	void ProbeTHCAndFallback(DataChunk &keys, TupleDataChunkState &key_state, ProbeState &state,
 	                        Vector &hashes_v, const SelectionVector *sel, idx_t &count, bool has_sel,
 	                        Vector &pointers_result_v, SelectionVector &match_sel,
@@ -458,6 +484,18 @@ private:
 	//! The byte offset of the join key in each cached row
 	//! Before that key, there is the validity byte coming from data_collection
 	idx_t tiered_hash_cache_key_offset = 0;
+
+	// ---- Per-instance THC parameters (loaded from ClientConfig at construction) ----
+	//! Memory budget (bytes) for the THC. Controls ComputeCapacity.
+	idx_t thc_budget_bytes;
+	//! Number of probe rows per collect phase before flushing to the THC.
+	idx_t thc_collect_phase_rows;
+	//! Maximum fraction of probe rows that can be spent in collect phases.
+	double thc_collect_budget_fraction;
+	//! Miss rate threshold for skipping collect phases.
+	double thc_miss_threshold;
+	//! Minimum HT capacity to activate the THC.
+	idx_t thc_activation_threshold;
 
 	//! Copying not allowed
 	JoinHashTable(const JoinHashTable &) = delete;

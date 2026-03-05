@@ -41,6 +41,15 @@ JoinHashTable::JoinHashTable(ClientContext &context_p, const vector<JoinConditio
       build_types(std::move(btypes)), output_columns(output_columns_p), entry_size(0), tuple_size(0),
       vfound(Value::BOOLEAN(false)), join_type(type_p), finalized(false), has_null(false),
       radix_bits(INITIAL_RADIX_BITS) {
+	// Load THC parameters from the client configuration.
+	// These are per-session settings that control THC sizing and adaptive behaviour
+	// so that users can tune them via SQL SET commands without recompiling.
+	auto &config = ClientConfig::GetConfig(context);
+	thc_budget_bytes = config.thc_budget_bytes;
+	thc_collect_phase_rows = config.thc_collect_phase_rows;
+	thc_collect_budget_fraction = config.thc_collect_budget_fraction;
+	thc_miss_threshold = config.thc_miss_threshold;
+	thc_activation_threshold = config.thc_activation_threshold;
 	for (idx_t i = 0; i < conditions.size(); ++i) {
 		auto &condition = conditions[i];
 		D_ASSERT(condition.left->return_type == condition.right->return_type);
@@ -383,7 +392,11 @@ inline bool JoinHashTable::UseSalt() const {
 //!   state.thc_miss_match_sel / thc_miss_match_count are populated with
 //!   the fallback rows that actually matched, enabling the caller to collect
 //!   {hash, row_ptr} pairs for THC insertion.
-//!   state.thc_miss_dense_index maps row_index -> dense hash index.
+//!
+//! IMPORTANT: hashes_v is NOT modified by this function (only Flatten/ToUnifiedFormat).
+//!   The caller can safely read hashes from hashes_v after this call returns.
+//!   Do NOT read from state.hashes_dense_v after this call — GetRowPointersInternal
+//!   overwrites it during the fallback probe.
 //!
 void JoinHashTable::ProbeTHCAndFallback(DataChunk &keys, TupleDataChunkState &key_state, ProbeState &state,
                                         Vector &hashes_v, const SelectionVector *sel, idx_t &count, bool has_sel,
@@ -561,36 +574,27 @@ void JoinHashTable::ProbeTHCAndFallback(DataChunk &keys, TupleDataChunkState &ke
 			                              entries, pointers_result_v, regular_match_sel, true);
 		}
 		
-		// Update two lists of indices with the regular (fallback) matches:
-		// The combined `match_sel` that has all matches `ProbeTHCAndFallback` found.
-		// thc_miss_match_sel which is used for collection during COLLECT phase.
+		// Update the combined match_sel with fallback matches.
+		// Also populate thc_miss_match_sel + dense-index mapping, but ONLY
+		// during COLLECT phase (cycle > 0) where the caller will consume them
+		// to insert new entries into the THC. In READ_ONLY phase this work
+		// is wasted — the data is never read.
+		// TODO pass this as a parameter instead of calculating it
+		const bool collecting = (state.tiered_hash_cache_phase == TieredHashCachePhase::COLLECT
+		                         && state.cycle_count > 0);
+
 		for (idx_t i = 0; i < regular_count; i++) {
 			const auto row_index = regular_match_sel.get_index(i);
 			match_sel.set_index(match_count++, row_index);
-			// TODO the line below still runs during READ-ONLY phase! Need to fix that.
-			state.thc_miss_match_sel.set_index(state.thc_miss_match_count++, row_index);
-		}
-
-		// Build the dense-index mapping so the caller can look up the hash
-		// for each miss-matched row. During ProbeByHash/ProbeAndMatch, the
-		// cache_miss_sel stores row_indices. We need to map those back to
-		// the dense hashes_dense[] index used for that row.
-		// Since hashes_dense[i] corresponds to row_index = has_sel ? sel->get_index(i) : i,
-		// we build the reverse mapping here.
-		if (state.thc_miss_match_count > 0) {
-			if (!has_sel) {
-				// Without selection, dense index == row index
-				for (idx_t i = 0; i < state.thc_miss_match_count; i++) {
-					const auto row_index = state.thc_miss_match_sel.get_index(i);
-					state.thc_miss_dense_index[row_index] = row_index;
-				}
-			} else {
-				// With selection, build a full reverse map from row_index -> dense_index
-				for (idx_t i = 0; i < count; i++) {
-					state.thc_miss_dense_index[sel->get_index(i)] = i;
-				}
+			if (collecting) {
+				state.thc_miss_match_sel.set_index(state.thc_miss_match_count++, row_index);
 			}
 		}
+
+		// NOTE: No dense-index mapping is needed here.  The caller reads
+		// hashes directly from hashes_v (which is preserved through
+		// ProbeTHCAndFallback) rather than from hashes_dense_v (which
+		// GetRowPointersInternal overwrites internally).
 	}
 }
 
@@ -623,8 +627,12 @@ void JoinHashTable::ProbeTHCAndFallback(DataChunk &keys, TupleDataChunkState &ke
 void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_state, ProbeState &state, Vector &hashes_v,
                                    const SelectionVector *sel, idx_t &count, Vector &pointers_result_v,
                                    SelectionVector &match_sel, const bool has_sel) {
-
-	if (!tiered_hash_cache) {
+	// If this thread has abandoned the THC (because the miss rate was
+	// persistently high and the THC was not helping), bypass all THC
+	// logic and use the vanilla DuckDB probe path.  This eliminates the
+	// per-probe overhead of hash densification, ProbeAndMatch, and
+	// fallback bookkeeping that would otherwise be wasted.
+	if (!tiered_hash_cache || state.thc_abandoned) {
 		if (UseSalt()) {
 			GetRowPointersInternal<true>(keys, key_state, state, hashes_v, sel, count, *this, entries,
 			                             pointers_result_v, match_sel, has_sel);
@@ -645,13 +653,13 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 	//              On cycle 0: use the regular DuckDB probe (THC is empty).
 	//              On cycle > 0: probe THC first, fall back to regular HT for
 	//              THC misses, and collect only miss-matched entries.
-	//              When probe_rows_in_phase >= COLLECT_PHASE_ROWS, flush entries into
+	//              When probe_rows_in_phase >= COLLECT_PHASE_PROBE_ROWS, flush entries into
 	//              the shared THC and transition to READ_ONLY.
 	//
 	//   READ_ONLY: Probe the THC, fall back for misses, track miss rate.
 	//              When read_only_rows_processed >= read_only_rows_target
 	//              (a "checkpoint"), evaluate three guards:
-	//                1) miss_rate >= THC_MISS_SKIP_THRESHOLD (10%)
+	//                1) miss_rate >= thc_miss_threshold (configurable, default 10%)
 	//                2) budget_ok: another collect phase won't exceed 2% overhead
 	//                3) !thc_full: the THC isn't saturated
 	//              If all three pass → enter COLLECT. Otherwise → stay in
@@ -734,13 +742,39 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 
 			// Collect the THC-miss rows that found a match in the regular HT.
 			// These are exactly the rows that the THC should learn about.
+			//
+			// BUG FIX: Previously read from state.hashes_dense_v via thc_miss_dense_index,
+			// but GetRowPointersInternal (called inside ProbeTHCAndFallback step 4)
+			// overwrites hashes_dense_v during its own densification and collision
+			// resolution. Reading it afterward returns garbage hashes, causing THC
+			// entries to be inserted with wrong keys and become unreachable.
+			//
+			// Fix: read hashes directly from hashes_v, which is preserved by
+			// ProbeTHCAndFallback (only Flatten or ToUnifiedFormat, no data mutation).
 			auto pointers_result = FlatVector::GetData<data_ptr_t>(pointers_result_v);
-			auto hashes_dense = FlatVector::GetData<hash_t>(state.hashes_dense_v);
-			for (idx_t i = 0; i < state.thc_miss_match_count; i++) {
-				const auto row_index = state.thc_miss_match_sel.get_index(i);
-				const auto hash = hashes_dense[state.thc_miss_dense_index[row_index]];
-				if (hash != 0) {
-					state.collected_entries.push_back({hash, pointers_result[row_index]});
+			if (!has_sel) {
+				// hashes_v was Flattened in ProbeTHCAndFallback step 1.
+				// Row index == flat index, so direct indexing is correct.
+				auto hashes_flat = FlatVector::GetData<hash_t>(hashes_v);
+				for (idx_t i = 0; i < state.thc_miss_match_count; i++) {
+					const auto row_index = state.thc_miss_match_sel.get_index(i);
+					const auto hash = hashes_flat[row_index];
+					if (hash != 0) {
+						state.collected_entries.push_back({hash, pointers_result[row_index]});
+					}
+				}
+			} else {
+				// hashes_v is in its original format; use UnifiedVectorFormat.
+				UnifiedVectorFormat hashes_uf;
+				hashes_v.ToUnifiedFormat(input_count, hashes_uf);
+				auto hashes_src = UnifiedVectorFormat::GetData<hash_t>(hashes_uf);
+				for (idx_t i = 0; i < state.thc_miss_match_count; i++) {
+					const auto row_index = state.thc_miss_match_sel.get_index(i);
+					const auto uvf_index = hashes_uf.sel->get_index(row_index);
+					const auto hash = hashes_src[uvf_index];
+					if (hash != 0) {
+						state.collected_entries.push_back({hash, pointers_result[row_index]});
+					}
 				}
 			}
 		}
@@ -754,7 +788,7 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 		// Flush collected entries into the shared THC and transition
 		// to READ_ONLY with the appropriate exponential backoff target.
 		// ----------------------------------------------------------
-		if (state.probe_rows_in_phase >= COLLECT_PHASE_PROBE_ROWS) {
+		if (state.probe_rows_in_phase >= thc_collect_phase_rows) {
 			// Insert all collected entries into the shared THC.
 			// The THC's CAS-based Insert is thread-safe and silently
 			// drops entries if the table is full or has hash collisions.
@@ -787,7 +821,9 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 			// The first READ_ONLY segment uses READ_ONLY_BASE_ROWS.
 			// Each subsequent segment doubles in length.
 			state.tiered_hash_cache_phase = TieredHashCachePhase::READ_ONLY;
-			state.read_only_rows_target = READ_ONLY_BASE_ROWS * (idx_t(1) << state.checkpoint_count);
+			// The first READ_ONLY segment length equals the collect phase size.
+			// Each subsequent segment doubles (exponential backoff).
+			state.read_only_rows_target = thc_collect_phase_rows * (idx_t(1) << state.checkpoint_count);
 			state.read_only_rows_processed = 0;
 			state.ro_miss_count = 0;
 			state.ro_total_count = 0;
@@ -830,17 +866,18 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 		    : 0.0;
 
 		// Check whether we can afford another collect phase within the total budget.
-		// We project the cost of the next COLLECT_PHASE_ROWS and check if
-		// total_collect_phase_rows + COLLECT_PHASE_ROWS stays within the budget.
+		// We project the cost of the next COLLECT_PHASE_PROBE_ROWS and check if
+		// total_collect_phase_rows + COLLECT_PHASE_PROBE_ROWS stays within the
+		// configured fraction budget.
 		const bool budget_ok =
-		    (state.total_collect_phase_rows + COLLECT_PHASE_PROBE_ROWS) <=
-		    static_cast<idx_t>(static_cast<double>(state.total_probe_rows) * COLLECT_BUDGET_FRACTION);
+		    (state.total_collect_phase_rows + thc_collect_phase_rows) <=
+		    static_cast<idx_t>(static_cast<double>(state.total_probe_rows) * thc_collect_budget_fraction);
 
 		// Check whether the THC has room for new entries
 		const bool thc_full = tiered_hash_cache->IsFull();
 
 		// All three guards must pass to enter COLLECT
-		const bool should_collect = (miss_rate >= THC_MISS_SKIP_THRESHOLD) && budget_ok && !thc_full;
+		const bool should_collect = (miss_rate >= thc_miss_threshold) && budget_ok && !thc_full;
 
 		DEBUG_LOG("[Checkpoint] checkpoint=%lu, ro_rows=%lu, miss_rate=%.2f%%, budget_ok=%d, thc_full=%d -> %s\n",
 		               (unsigned long)state.checkpoint_count,
@@ -848,6 +885,28 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 		               miss_rate * 100.0,
 		               (int)budget_ok, (int)thc_full,
 		               should_collect ? "COLLECT" : "SKIP");
+
+		// ---- Abandonment check ----
+		// If the miss rate is very high (above THC_ABANDON_MISS_THRESHOLD),
+		// the THC is clearly not helping this thread.  We track consecutive
+		// high-miss checkpoints and permanently abandon the THC once the
+		// counter reaches THC_ABANDON_CONSECUTIVE_MISSES.  After abandonment,
+		// GetRowPointers skips all THC logic and goes straight to the vanilla
+		// DuckDB probe path, eliminating the overhead entirely.
+		if (miss_rate >= THC_ABANDON_MISS_THRESHOLD) {
+			state.consecutive_high_miss_checkpoints++;
+			if (state.consecutive_high_miss_checkpoints >= THC_ABANDON_CONSECUTIVE_MISSES) {
+				DEBUG_LOG("[THC Abandon] thread abandoned THC after %lu consecutive high-miss checkpoints "
+				          "(miss_rate=%.2f%%)\n",
+				          (unsigned long)state.consecutive_high_miss_checkpoints,
+				          miss_rate * 100.0);
+				state.thc_abandoned = true;
+				return;
+			}
+		} else {
+			// Reset the counter when we observe a low-miss segment
+			state.consecutive_high_miss_checkpoints = 0;
+		}
 
 		// Always increment checkpoint count (controls exponential backoff)
 		state.checkpoint_count++;
@@ -860,7 +919,7 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 		} else {
 			// Stay in READ_ONLY with a doubled target.
 			// Reset segment counters for the next checkpoint evaluation.
-			state.read_only_rows_target = READ_ONLY_BASE_ROWS * (idx_t(1) << state.checkpoint_count);
+			state.read_only_rows_target = thc_collect_phase_rows * (idx_t(1) << state.checkpoint_count);
 			state.read_only_rows_processed = 0;
 			state.ro_miss_count = 0;
 			state.ro_total_count = 0;
@@ -1300,7 +1359,7 @@ void JoinHashTable::InitializeTieredHashCache() {
 		return;
 	}
 
-	if (capacity <= TieredHashCache::ACTIVATION_THRESHOLD) {
+	if (capacity <= thc_activation_threshold) {
 		return;
 	}
 
@@ -1324,7 +1383,7 @@ void JoinHashTable::InitializeTieredHashCache() {
 	    pointer_offset + sizeof(data_ptr_t);             // TODO might be duplicative of logic in FashHashCache
 	const idx_t row_copy_offset = 0;                     // TODO hack?
 	tiered_hash_cache_key_offset = layout_ptr->GetOffsets()[0]; // key after validity bytes // TODO this is a hack!!!
-	const idx_t cache_capacity = TieredHashCache::ComputeCapacity(data_collection_row_size);
+	const idx_t cache_capacity = TieredHashCache::ComputeCapacity(data_collection_row_size, thc_budget_bytes);
 	tiered_hash_cache = make_uniq<TieredHashCache>(cache_capacity, data_collection_row_size, row_copy_offset);
 
 	DEBUG_LOG("[InitTHC] row_size=%lu (tuple_size=%lu, pointer_offset=%lu), entry_stride=%lu, capacity=%lu, "
