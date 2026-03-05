@@ -19,8 +19,8 @@
           // "${workspaceFolder}/scripts/measure/1_cold_interleaved_DEBUG.sql"
           // "${workspaceFolder}/scripts/measure/1_cold_interleaved.sql"
         ],
-        // "preLaunchTask": "Build Debug",
         "cwd": "${workspaceFolder}"
+        // "preLaunchTask": "Build Debug",
       },
 
       {
@@ -36,3 +36,5 @@
       }
     ]
   }
+ 
+  
