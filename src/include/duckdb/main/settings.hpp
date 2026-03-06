@@ -556,6 +556,87 @@ struct EnableHTTPLoggingSetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
+struct RptForwardOnlySetting {
+	using RETURN_TYPE = bool;
+	static constexpr const char *Name = "rpt_forward_only";
+	static constexpr const char *Description = "When enabled, only the forward pass of RPT+ is executed (backward pass is skipped)";
+	static constexpr const char *InputType = "BOOLEAN";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct DisableRptSetting {
+	using RETURN_TYPE = bool;
+	static constexpr const char *Name = "disable_rpt";
+	static constexpr const char *Description = "When enabled, neither the forward pass nor the backward pass of RPT+ are executed (both are skipped)";
+	static constexpr const char *InputType = "BOOLEAN";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct DisableTieredHashCacheSetting {
+	using RETURN_TYPE = bool;
+	static constexpr const char *Name = "disable_tiered_hash_cache";
+	static constexpr const char *Description = "When enabled, skip initializing the tiered hash cache";
+	static constexpr const char *InputType = "BOOLEAN";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct ThcL3BudgetSetting {
+	using RETURN_TYPE = int64_t;
+	static constexpr const char *Name = "thc_l3_budget";
+	static constexpr const char *Description = "Memory budget in bytes for the Tiered Hash Cache (default: 6 MiB)";
+	static constexpr const char *InputType = "BIGINT";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct ThcCollectPhaseRowsSetting {
+	using RETURN_TYPE = int64_t;
+	static constexpr const char *Name = "thc_collect_phase_rows";
+	static constexpr const char *Description = "Number of probe-side rows per THC collect phase (default: 200000)";
+	static constexpr const char *InputType = "BIGINT";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct ThcCollectBudgetFractionSetting {
+	using RETURN_TYPE = double;
+	static constexpr const char *Name = "thc_collect_budget_fraction";
+	static constexpr const char *Description =
+	    "Maximum fraction of probe rows that can be spent in THC collect phases (default: 0.02)";
+	static constexpr const char *InputType = "DOUBLE";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct ThcMissThresholdSetting {
+	using RETURN_TYPE = double;
+	static constexpr const char *Name = "thc_miss_threshold";
+	static constexpr const char *Description = "THC miss rate threshold below which collect phases are skipped (default: 0.10)";
+	static constexpr const char *InputType = "DOUBLE";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct ThcActivationThresholdSetting {
+	using RETURN_TYPE = int64_t;
+	static constexpr const char *Name = "thc_activation_threshold";
+	static constexpr const char *Description = "Minimum HT capacity (entries) to activate the THC (default: ~1.3M)";
+	static constexpr const char *InputType = "BIGINT";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
 struct EnableHTTPMetadataCacheSetting {
 	using RETURN_TYPE = bool;
 	static constexpr const char *Name = "enable_http_metadata_cache";
@@ -1042,6 +1123,17 @@ struct PerfectHtThresholdSetting {
 	static constexpr const char *InputType = "UBIGINT";
 	static void SetLocal(ClientContext &context, const Value &parameter);
 	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct PinThreadsSetting {
+	using RETURN_TYPE = ThreadPinMode;
+	static constexpr const char *Name = "pin_threads";
+	static constexpr const char *Description =
+	    "Whether to pin threads to cores (Linux only, default AUTO: on when there are more than 64 cores)";
+	static constexpr const char *InputType = "VARCHAR";
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
 	static Value GetSetting(const ClientContext &context);
 };
 

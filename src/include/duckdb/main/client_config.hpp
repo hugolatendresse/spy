@@ -72,6 +72,28 @@ struct ClientConfig {
 	bool verify_serializer = false;
 	//! Enable the running of optimizers
 	bool enable_optimizer = true;
+	//! When true, only the forward pass of RPT+ is executed (backward pass is skipped)
+	bool rpt_forward_only = false;
+	//! When true, all of RPT+ is disable (both forward and backware passes are skipped)
+	bool disable_rpt = false;
+	//! When true, skip initializing the tiered hash cache
+	bool disable_tiered_hash_cache = false;
+	//! Memory budget (in bytes) for the Tiered Hash Cache.
+	//! Controls how much of L3 the THC is allowed to occupy.
+	//! Default: 22 MiB (sized for typical L3 caches).
+	idx_t thc_budget_bytes = 22ULL * 1024 * 1024;
+	//! Number of probe-side rows processed per THC collect phase.
+	//! Smaller values mean faster warm-up but more frequent collect/flush cycles.
+	idx_t thc_collect_phase_rows = 200000;
+	//! Maximum fraction of probe rows that can be spent in THC collect phases.
+	//! Example: 0.02 means collect overhead is capped at 2% of probe rows.
+	double thc_collect_budget_fraction = 0.02;
+	//! THC miss rate threshold (0.0–1.0). If the miss rate in a READ_ONLY
+	//! segment is below this, we skip the next collect phase.
+	double thc_miss_threshold = 0.10;
+	//! Minimum HT capacity (in entries) to activate the THC.
+	//! Hash tables smaller than this are assumed to fit in L3 naturally.
+	idx_t thc_activation_threshold = 10ULL * 1024 * 1024 / sizeof(uint64_t);
 	//! Enable caching operators
 	bool enable_caching_operators = true;
 	//! Force parallelism of small tables, used for testing

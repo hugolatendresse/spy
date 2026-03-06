@@ -57,7 +57,7 @@ Value AllocatorBackgroundThreadsSetting::GetSetting(const ClientContext &context
 }
 
 //===----------------------------------------------------------------------===//
-// Allow Community Extensions
+
 //===----------------------------------------------------------------------===//
 void AllowCommunityExtensionsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
 	if (!OnGlobalSet(db, config, input)) {
@@ -513,6 +513,142 @@ void EnableHTTPLoggingSetting::ResetLocal(ClientContext &context) {
 Value EnableHTTPLoggingSetting::GetSetting(const ClientContext &context) {
 	auto &config = ClientConfig::GetConfig(context);
 	return Value::BOOLEAN(config.enable_http_logging);
+}
+
+//===----------------------------------------------------------------------===//
+// RPT Forward Only
+//===----------------------------------------------------------------------===//
+void RptForwardOnlySetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.rpt_forward_only = input.GetValue<bool>();
+}
+
+void RptForwardOnlySetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).rpt_forward_only = ClientConfig().rpt_forward_only;
+}
+
+Value RptForwardOnlySetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::BOOLEAN(config.rpt_forward_only);
+}
+
+//===----------------------------------------------------------------------===//
+// Disable RPT
+//===----------------------------------------------------------------------===//
+void DisableRptSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.disable_rpt = input.GetValue<bool>();
+}
+
+void DisableRptSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).disable_rpt = ClientConfig().disable_rpt;
+}
+
+Value DisableRptSetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::BOOLEAN(config.disable_rpt);
+}
+
+//===----------------------------------------------------------------------===//
+// Disable Tiered Hash Cache
+//===----------------------------------------------------------------------===//
+void DisableTieredHashCacheSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.disable_tiered_hash_cache = input.GetValue<bool>();
+}
+
+void DisableTieredHashCacheSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).disable_tiered_hash_cache = ClientConfig().disable_tiered_hash_cache;
+}
+
+Value DisableTieredHashCacheSetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::BOOLEAN(config.disable_tiered_hash_cache);
+}
+
+//===----------------------------------------------------------------------===//
+// THC L3 Budget
+//===----------------------------------------------------------------------===//
+void ThcL3BudgetSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.thc_budget_bytes = static_cast<idx_t>(input.GetValue<int64_t>());
+}
+
+void ThcL3BudgetSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).thc_budget_bytes = ClientConfig().thc_budget_bytes;
+}
+
+Value ThcL3BudgetSetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::BIGINT(static_cast<int64_t>(config.thc_budget_bytes));
+}
+
+//===----------------------------------------------------------------------===//
+// THC Collect Phase Rows
+//===----------------------------------------------------------------------===//
+void ThcCollectPhaseRowsSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.thc_collect_phase_rows = static_cast<idx_t>(input.GetValue<int64_t>());
+}
+
+void ThcCollectPhaseRowsSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).thc_collect_phase_rows = ClientConfig().thc_collect_phase_rows;
+}
+
+Value ThcCollectPhaseRowsSetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::BIGINT(static_cast<int64_t>(config.thc_collect_phase_rows));
+}
+
+//===----------------------------------------------------------------------===//
+// THC Collect Budget Fraction
+//===----------------------------------------------------------------------===//
+void ThcCollectBudgetFractionSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.thc_collect_budget_fraction = input.GetValue<double>();
+}
+
+void ThcCollectBudgetFractionSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).thc_collect_budget_fraction = ClientConfig().thc_collect_budget_fraction;
+}
+
+Value ThcCollectBudgetFractionSetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::DOUBLE(config.thc_collect_budget_fraction);
+}
+
+//===----------------------------------------------------------------------===//
+// THC Miss Threshold
+//===----------------------------------------------------------------------===//
+void ThcMissThresholdSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.thc_miss_threshold = input.GetValue<double>();
+}
+
+void ThcMissThresholdSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).thc_miss_threshold = ClientConfig().thc_miss_threshold;
+}
+
+Value ThcMissThresholdSetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::DOUBLE(config.thc_miss_threshold);
+}
+
+//===----------------------------------------------------------------------===//
+// THC Activation Threshold
+//===----------------------------------------------------------------------===//
+void ThcActivationThresholdSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.thc_activation_threshold = static_cast<idx_t>(input.GetValue<int64_t>());
+}
+
+void ThcActivationThresholdSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).thc_activation_threshold = ClientConfig().thc_activation_threshold;
+}
+
+Value ThcActivationThresholdSetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::BIGINT(static_cast<int64_t>(config.thc_activation_threshold));
 }
 
 //===----------------------------------------------------------------------===//
@@ -1014,6 +1150,23 @@ Value PartitionedWriteMaxOpenFilesSetting::GetSetting(const ClientContext &conte
 //===----------------------------------------------------------------------===//
 void PerfectHtThresholdSetting::ResetLocal(ClientContext &context) {
 	ClientConfig::GetConfig(context).perfect_ht_threshold = ClientConfig().perfect_ht_threshold;
+}
+
+//===----------------------------------------------------------------------===//
+// Pin Threads
+//===----------------------------------------------------------------------===//
+void PinThreadsSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	auto str_input = StringUtil::Upper(input.GetValue<string>());
+	config.options.pin_threads = EnumUtil::FromString<ThreadPinMode>(str_input);
+}
+
+void PinThreadsSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+	config.options.pin_threads = DBConfig().options.pin_threads;
+}
+
+Value PinThreadsSetting::GetSetting(const ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value(StringUtil::Lower(EnumUtil::ToString(config.options.pin_threads)));
 }
 
 //===----------------------------------------------------------------------===//
