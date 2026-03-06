@@ -9,6 +9,15 @@ PRAGMA profiling_coverage = 'SELECT';
 
 SET disable_tiered_hash_cache = 'false';
 
+SET threads = 4;
+SET pin_threads = 'on';
+SET thc_l3_budget = 4194304;
+SET thc_collect_phase_rows = 100000; 
+SET thc_collect_budget_fraction = 0.02; 
+SET thc_miss_threshold = 0.05; 
+SET thc_activation_threshold = 500000;
+SET rpt_forward_only = true;
+
 load tpch;
 -- call dbgen(sf = 10);
 pragma tpch(5);
