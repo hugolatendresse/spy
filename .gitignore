@@ -268,6 +268,7 @@ venv/
 # .vs
 # settings.json
 # .vscode
+.github/copilot-instructions.md
 
 # QtCreator files
 *.user
@@ -361,3 +362,4 @@ extension_external
 
 test/sql/pragma/output.json
 tools/pythonpkg/duckdb_build/
+

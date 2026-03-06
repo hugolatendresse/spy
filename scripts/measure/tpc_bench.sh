@@ -157,7 +157,7 @@ if [[ $DISABLE_RPT -eq 1 ]]; then
 	EXTRA_SET="${EXTRA_SET} SET disable_rpt = true;"
 fi
 if [[ $RPT_FORWARD_ONLY -eq 1 ]]; then
-	EXTRA_SET="SET rpt_forward_only = true;"
+	EXTRA_SET="${EXTRA_SET} SET rpt_forward_only = true;"
 fi
 if [[ $DISABLE_TIERED_HASH_CACHE -eq 1 ]]; then
 	EXTRA_SET="${EXTRA_SET} SET disable_tiered_hash_cache = true;"
