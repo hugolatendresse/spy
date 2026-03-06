@@ -1395,24 +1395,24 @@ void JoinHashTable::Finalize(idx_t chunk_idx_from, idx_t chunk_idx_to, bool para
 }
 
 void JoinHashTable::InitializeTieredHashCache() {
-	// return; // Uncommenting this skips the use of THC. Performance becomes the same as the original
-	auto &config = ClientConfig::GetConfig(context);
-	if (config.disable_tiered_hash_cache) {
-		return;
-	}
+	// // return; // Uncommenting this skips the use of THC. Performance becomes the same as the original
+	// auto &config = ClientConfig::GetConfig(context);
+	// if (config.disable_tiered_hash_cache) {
+	// 	return;
+	// }
 
-	if (capacity <= thc_activation_threshold) {
-		return;
-	}
+	// if (capacity <= thc_activation_threshold) {
+	// 	return;
+	// }
 
-	// Only activate for all-constant (fixed-size) equality key types
-	// TODO support non-fixed sized merge keys in THC
-	for (const auto &type : equality_types) {
-		if (type.InternalType() == PhysicalType::VARCHAR || type.InternalType() == PhysicalType::STRUCT ||
-		    type.InternalType() == PhysicalType::LIST) {
-			return;
-		}
-	}
+	// // Only activate for all-constant (fixed-size) equality key types
+	// // TODO support non-fixed sized merge keys in THC
+	// for (const auto &type : equality_types) {
+	// 	if (type.InternalType() == PhysicalType::VARCHAR || type.InternalType() == PhysicalType::STRUCT ||
+	// 	    type.InternalType() == PhysicalType::LIST) {
+	// 		return;
+	// 	}
+	// }
 
 	// THC stores one data_collection row per cache entry, including the next_pointer
 	// at the end of the row that acts as a chain pointer on the build side.
@@ -1444,14 +1444,14 @@ void JoinHashTable::InitializeTieredHashCache() {
 	// Below 5%, THC is net negative for uniform workloads and quickly
 	// gets abandoned anyway (wasting the collect-phase overhead).
 	// ---------------------------------------------------------------
-	static constexpr double MIN_COVERAGE_RATIO = 0.01;
+	static constexpr double MIN_COVERAGE_RATIO = 0.05;
 	const double coverage_ratio = static_cast<double>(cache_capacity) / static_cast<double>(capacity);
-	if (coverage_ratio < MIN_COVERAGE_RATIO) {
-		DEBUG_LOG("[InitTHC] Skipping: coverage ratio %.2f%% (cache_capacity=%lu, ht_capacity=%lu) below %.0f%% threshold\n",
-		          coverage_ratio * 100.0, (unsigned long)cache_capacity, (unsigned long)capacity,
-		          MIN_COVERAGE_RATIO * 100.0);
-		return;
-	}
+	// if (coverage_ratio < MIN_COVERAGE_RATIO) {
+	// 	DEBUG_LOG("[InitTHC] Skipping: coverage ratio %.2f%% (cache_capacity=%lu, ht_capacity=%lu) below %.0f%% threshold\n",
+	// 	          coverage_ratio * 100.0, (unsigned long)cache_capacity, (unsigned long)capacity,
+	// 	          MIN_COVERAGE_RATIO * 100.0);
+	// 	return;
+	// }
 
 	tiered_hash_cache = make_uniq<TieredHashCache>(cache_capacity, data_collection_row_size, row_copy_offset);
 

@@ -58,11 +58,8 @@ SELECT
 FROM per_order_lineitem_fanout;
 
 
-<<<<<<< HEAD
-EXPLAIN ANALYZE SELECT
-=======
+-- EXPLAIN ANALYZE SELECT
 SELECT
->>>>>>> origin/main
     n_name,
     sum(l_extendedprice * (1 - l_discount)) AS revenue
 FROM
