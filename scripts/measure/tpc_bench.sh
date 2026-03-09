@@ -14,6 +14,13 @@ DISABLE_RPT=0
 DISABLE_TIERED_HASH_CACHE=0
 TPCH_QUERY=""
 RUNS=1
+BENCH_THREADS=4
+PIN_THREADS="on"
+THC_L3_BUDGET=4194304
+THC_COLLECT_PHASE_ROWS=100000
+THC_COLLECT_BUDGET_FRACTION=0.02
+THC_MISS_THRESHOLD=0.05
+THC_ACTIVATION_THRESHOLD=500000
 
 # Track which options were explicitly passed
 PASSED_OPTIONS=()
@@ -32,6 +39,17 @@ Options:
 	--tpcds-only            Run only TPC-DS (default: run both TPC-H and TPC-DS)
 	--tpch-query <number>   Run only a specific TPC-H query (1-22, implies --tpch-only)
 	--runs <number>         Number of benchmark runs (default: 1)
+	--threads <number>      Value for SET threads (default: 4)
+	--pin-threads <mode>    Value for SET pin_threads (default: on)
+	--thc-l3-budget <num>   Value for SET thc_l3_budget (default: 4194304)
+	--thc-collect-phase-rows <num>
+	                        Value for SET thc_collect_phase_rows (default: 100000)
+	--thc-collect-budget-fraction <num>
+	                        Value for SET thc_collect_budget_fraction (default: 0.02)
+	--thc-miss-threshold <num>
+	                        Value for SET thc_miss_threshold (default: 0.05)
+	--thc-activation-threshold <num>
+	                        Value for SET thc_activation_threshold (default: 500000)
 	--rpt-forward-only      Disable the RPT backward pass (do forward pass only)
 	--disable-rpt           Disable both the RPT forward and backward pass
 	--disable-thc           Disable the tiered hash cache
@@ -102,6 +120,41 @@ while [[ $# -gt 0 ]]; do
 			PASSED_OPTIONS+=("--runs $2")
 			shift 2
 			;;
+		--threads)
+			BENCH_THREADS="$2"
+			PASSED_OPTIONS+=("--threads $2")
+			shift 2
+			;;
+		--pin-threads)
+			PIN_THREADS="$2"
+			PASSED_OPTIONS+=("--pin-threads $2")
+			shift 2
+			;;
+		--thc-l3-budget)
+			THC_L3_BUDGET="$2"
+			PASSED_OPTIONS+=("--thc-l3-budget $2")
+			shift 2
+			;;
+		--thc-collect-phase-rows)
+			THC_COLLECT_PHASE_ROWS="$2"
+			PASSED_OPTIONS+=("--thc-collect-phase-rows $2")
+			shift 2
+			;;
+		--thc-collect-budget-fraction)
+			THC_COLLECT_BUDGET_FRACTION="$2"
+			PASSED_OPTIONS+=("--thc-collect-budget-fraction $2")
+			shift 2
+			;;
+		--thc-miss-threshold)
+			THC_MISS_THRESHOLD="$2"
+			PASSED_OPTIONS+=("--thc-miss-threshold $2")
+			shift 2
+			;;
+		--thc-activation-threshold)
+			THC_ACTIVATION_THRESHOLD="$2"
+			PASSED_OPTIONS+=("--thc-activation-threshold $2")
+			shift 2
+			;;
 		--rpt-forward-only)
 			RPT_FORWARD_ONLY=1
 			PASSED_OPTIONS+=("--rpt-forward-only")
@@ -134,6 +187,20 @@ if ! [[ "$RUNS" =~ ^[0-9]+$ ]] || [[ "$RUNS" -lt 1 ]]; then
 	exit 1
 fi
 
+if ! [[ "$BENCH_THREADS" =~ ^[0-9]+$ ]] || [[ "$BENCH_THREADS" -lt 1 ]]; then
+	echo "Error: --threads must be a positive integer" >&2
+	exit 1
+fi
+
+case "$PIN_THREADS" in
+	on|off|auto)
+		;;
+	*)
+		echo "Error: --pin-threads must be one of: on, off, auto" >&2
+		exit 1
+		;;
+esac
+
 if [[ -z "$DB_BASE_PATH" ]]; then
 	DB_BASE_PATH="../benchmark_data"
 fi
@@ -152,12 +219,12 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 # Build optional SET prefix
 # For reproducible benchmarks, always use four threads and pinned them 
-EXTRA_SET="SET threads = 4; SET pin_threads = 'on'; SET thc_l3_budget = 4194304; SET thc_collect_phase_rows = 100000; SET thc_collect_budget_fraction = 0.02; SET thc_miss_threshold = 0.05; SET thc_activation_threshold = 500000;"
+EXTRA_SET="SET threads = ${BENCH_THREADS}; SET pin_threads = '${PIN_THREADS}'; SET thc_l3_budget = ${THC_L3_BUDGET}; SET thc_collect_phase_rows = ${THC_COLLECT_PHASE_ROWS}; SET thc_collect_budget_fraction = ${THC_COLLECT_BUDGET_FRACTION}; SET thc_miss_threshold = ${THC_MISS_THRESHOLD}; SET thc_activation_threshold = ${THC_ACTIVATION_THRESHOLD};"
 if [[ $DISABLE_RPT -eq 1 ]]; then
 	EXTRA_SET="${EXTRA_SET} SET disable_rpt = true;"
 fi
 if [[ $RPT_FORWARD_ONLY -eq 1 ]]; then
-	EXTRA_SET="SET rpt_forward_only = true;"
+	EXTRA_SET="${EXTRA_SET} SET rpt_forward_only = true;"
 fi
 if [[ $DISABLE_TIERED_HASH_CACHE -eq 1 ]]; then
 	EXTRA_SET="${EXTRA_SET} SET disable_tiered_hash_cache = true;"

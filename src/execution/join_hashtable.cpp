@@ -198,45 +198,87 @@ static idx_t ProbeForPointersInternal(JoinHashTable::ProbeState &state, JoinHash
 
 	idx_t keys_to_compare_count = 0;
 
-	for (idx_t i = 0; i < count; i++) {
+	// -------------------------------------------------------------------
+	// Grouped two-pass prefetching for the entries array.
+	//
+	// For large hash tables (many millions of entries), each access to
+	// entries[row_ht_offset] is very likely an L3 cache miss because the
+	// entry positions are essentially random across hundreds of MB of
+	// memory.  A simple streaming prefetch (N slots ahead) isn't effective
+	// enough because the per-row processing is too fast to overlap the
+	// full DRAM latency (~80-100ns).
+	//
+	// Instead, we process rows in GROUPS of PREFETCH_GROUP_SIZE.  For each
+	// group:
+	//   Pass 1: Compute all HT offsets and issue prefetch hints.
+	//           This is pure arithmetic — no stalls.
+	//   Pass 2: Process entries (which are now in L1/L2 from the prefetches
+	//           issued in Pass 1).
+	//
+	// Tuning: Group size 32 was determined empirically on TPC-H Q5 SF200
+	// (i7-11850H, 24MB L3, 4 threads). Measured ProbeForPointers time:
+	//   vanilla: 12666ms | grp=16: 13315ms | grp=32: 11370ms | grp=64: 11369ms
+	// Group_size=32 gives the best avg with lowest variance (CV=7.8% vs 10.8%).
+	// Smaller groups (16) add overhead without benefit. Larger groups (64)
+	// increase variance (possibly cache line eviction or prefetch drops).
+	// -------------------------------------------------------------------
+	static constexpr idx_t PREFETCH_GROUP_SIZE = 32;
 
-		auto row_hash = hashes_dense[i]; // hashes has been flattened before -> always access dense
-		auto row_ht_offset = row_hash & ht.bitmask;
+	// Scratch buffer for precomputed HT offsets (on stack, small)
+	idx_t ht_offsets_scratch[PREFETCH_GROUP_SIZE];
 
-		if (USE_SALTS) {
-			// increment the ht_offset of the entry as long as next entry is occupied and salt does not match
-			while (true) {
+	for (idx_t group_start = 0; group_start < count; group_start += PREFETCH_GROUP_SIZE) {
+		const idx_t group_end = MinValue<idx_t>(group_start + PREFETCH_GROUP_SIZE, count);
+
+		// Pass 1: Compute HT offsets and issue prefetch hints for this group.
+		// This pass is pure arithmetic + prefetch instructions — no memory stalls.
+		for (idx_t i = group_start; i < group_end; i++) {
+			ht_offsets_scratch[i - group_start] = hashes_dense[i] & ht.bitmask;
+			__builtin_prefetch(&entries[ht_offsets_scratch[i - group_start]], 0 /* read */, 3 /* high temporal */);
+		}
+
+		// Pass 2: Process entries in this group.
+		// By now the prefetched cache lines should be in L1/L2.
+		for (idx_t i = group_start; i < group_end; i++) {
+			const auto row_hash = hashes_dense[i];
+			auto row_ht_offset = ht_offsets_scratch[i - group_start];
+
+			if (USE_SALTS) {
+				// increment the ht_offset of the entry as long as next entry is occupied and salt does not match
+				while (true) {
+					const ht_entry_t entry = entries[row_ht_offset];
+					const bool occupied = entry.IsOccupied();
+
+					// the entry is empty -> no match possible
+					if (!occupied) {
+						break;
+					}
+
+					const hash_t row_salt = ht_entry_t::ExtractSalt(row_hash);
+					const bool salt_match = entry.GetSalt() == row_salt;
+					if (salt_match) {
+						// we know that the entry is occupied and the salt matches -> compare the keys
+						auto row_index = GetOptionalIndex<HAS_SEL>(row_sel, i);
+						AddPointerToCompare(state, entry, pointers_result_v, row_ht_offset, keys_to_compare_count,
+						                    row_index);
+						break;
+					}
+
+					// full and salt does not match -> continue probing
+					IncrementAndWrap(row_ht_offset, ht.bitmask);
+				}
+			} else {
 				const ht_entry_t entry = entries[row_ht_offset];
 				const bool occupied = entry.IsOccupied();
-
-				// the entry is empty -> no match possible
-				if (!occupied) {
-					break;
-				}
-
-				const hash_t row_salt = ht_entry_t::ExtractSalt(row_hash);
-				const bool salt_match = entry.GetSalt() == row_salt;
-				if (salt_match) {
-					// we know that the enty is occupied and the salt matches -> compare the keys
+				if (occupied) {
+					// the entry is occupied -> compare the keys
 					auto row_index = GetOptionalIndex<HAS_SEL>(row_sel, i);
 					AddPointerToCompare(state, entry, pointers_result_v, row_ht_offset, keys_to_compare_count,
 					                    row_index);
-					break;
 				}
-
-				// full and salt does not match -> continue probing
-				IncrementAndWrap(row_ht_offset, ht.bitmask);
 			}
-		} else {
-			const ht_entry_t entry = entries[row_ht_offset];
-			const bool occupied = entry.IsOccupied();
-			if (occupied) {
-				// the entry is occupied -> compare the keys
-				auto row_index = GetOptionalIndex<HAS_SEL>(row_sel, i);
-				AddPointerToCompare(state, entry, pointers_result_v, row_ht_offset, keys_to_compare_count, row_index);
-			}
-		}
-	}
+		} // end Pass 2
+	} // end group loop
 
 	return keys_to_compare_count;
 }
@@ -1353,7 +1395,6 @@ void JoinHashTable::Finalize(idx_t chunk_idx_from, idx_t chunk_idx_to, bool para
 }
 
 void JoinHashTable::InitializeTieredHashCache() {
-	// return; // Uncommenting this skips the use of THC. Performance becomes the same as the original
 	auto &config = ClientConfig::GetConfig(context);
 	if (config.disable_tiered_hash_cache) {
 		return;
@@ -1384,6 +1425,33 @@ void JoinHashTable::InitializeTieredHashCache() {
 	const idx_t row_copy_offset = 0;                     // TODO hack?
 	tiered_hash_cache_key_offset = layout_ptr->GetOffsets()[0]; // key after validity bytes // TODO this is a hack!!!
 	const idx_t cache_capacity = TieredHashCache::ComputeCapacity(data_collection_row_size, thc_budget_bytes);
+
+	// ---------------------------------------------------------------
+	// Coverage ratio check: skip THC if it can only cache a tiny
+	// fraction of the hash table.
+	//
+	// For uniform access patterns (e.g., TPC-H Q5 l_orderkey join),
+	// the THC hit rate approximately equals cache_capacity / ht_capacity.
+	// If this ratio is too low, the per-probe overhead of THC (hash
+	// densification, cache lookup, fallback merge) exceeds the savings
+	// from the rare hits.  We require the THC to cover at least 5% of
+	// the HT to have a reasonable chance of helping.
+	//
+	// A 5% coverage means 5% of probes hit on average (for uniform
+	// access), saving ~200ns per hit but costing ~10ns per miss.
+	// Break-even: 0.95 × 10ns < 0.05 × 200ns → 9.5 < 10 → marginal.
+	// Below 5%, THC is net negative for uniform workloads and quickly
+	// gets abandoned anyway (wasting the collect-phase overhead).
+	// ---------------------------------------------------------------
+	static constexpr double MIN_COVERAGE_RATIO = 0.05;
+	const double coverage_ratio = static_cast<double>(cache_capacity) / static_cast<double>(capacity);
+	if (coverage_ratio < MIN_COVERAGE_RATIO) {
+		DEBUG_LOG("[InitTHC] Skipping: coverage ratio %.2f%% (cache_capacity=%lu, ht_capacity=%lu) below %.0f%% threshold\n",
+		          coverage_ratio * 100.0, (unsigned long)cache_capacity, (unsigned long)capacity,
+		          MIN_COVERAGE_RATIO * 100.0);
+		return;
+	}
+
 	tiered_hash_cache = make_uniq<TieredHashCache>(cache_capacity, data_collection_row_size, row_copy_offset);
 
 	DEBUG_LOG("[InitTHC] row_size=%lu (tuple_size=%lu, pointer_offset=%lu), entry_stride=%lu, capacity=%lu, "
