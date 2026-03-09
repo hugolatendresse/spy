@@ -68,6 +68,37 @@ load tpch;
 -- 2nd big join: everything w/ supplier on c_nationkey = s_nationkey, l_suppkey = s_suppkey
 
 
+
+/*Check selectivity in merge of lineitem onto BULK*/
+-- WITH BULK AS (
+--     SELECT n_name, o_orderkey, c_nationkey
+--     FROM customer, orders, nation, region
+--     WHERE c_custkey = o_custkey
+--       AND c_nationkey = n_nationkey
+--       AND n_regionkey = r_regionkey
+--       AND r_name = 'ASIA'
+--       AND o_orderdate >= DATE '1994-01-01'
+--       AND o_orderdate <  DATE '1995-01-01'
+-- )
+-- SELECT
+--     COUNT(DISTINCT b.o_orderkey) AS total_bulk_orderkeys,
+--     COUNT(DISTINCT b.o_orderkey) FILTER (WHERE l.l_orderkey IS NOT NULL) AS bulk_orderkeys_with_lineitem,
+--     COUNT(DISTINCT b.o_orderkey) FILTER (WHERE l.l_orderkey IS NULL)     AS bulk_orderkeys_without_lineitem
+-- FROM BULK b
+-- LEFT JOIN lineitem l
+--   ON l.l_orderkey = b.o_orderkey;
+-- RESULT: all 2,273,588 build-side keys in BULK are hot!
+
+
+
+
+/* 
+
+MAIN QUERY
+
+*/
+
+
 EXPLAIN ANALYZE 
 
 with BULK as (
@@ -86,20 +117,28 @@ WHERE
     AND o_orderdate >= CAST('1994-01-01' AS date)
     AND o_orderdate < CAST('1995-01-01' AS date)
 
-)
+),
 
+PENULTIMATE AS (
+
+SELECT n_name, c_nationkey, l_suppkey, l_extendedprice, l_discount
+FROM 
+  BULK,
+  lineitem
+WHERE
+    l_orderkey = o_orderkey -- o_ is build side
+
+)
 
 -- EXPLAIN ANALYZE SELECT
 SELECT
     n_name,
     sum(l_extendedprice * (1 - l_discount)) AS revenue
 FROM
-    BULK,
-    lineitem,
+    PENULTIMATE,
     supplier
 WHERE
-    l_orderkey = o_orderkey -- o_ is build side
-    AND c_nationkey = s_nationkey
+    c_nationkey = s_nationkey
     AND l_suppkey = s_suppkey
 GROUP BY
     n_name
