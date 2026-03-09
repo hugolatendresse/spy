@@ -1,7 +1,7 @@
 /* Can run with:
-clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf10.duckdb -f scripts/measure/tpch5_1_old_duckdb.sql
-clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf50.duckdb -f scripts/measure/tpch5_1_old_duckdb.sql
-clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf100.duckdb -f scripts/measure/tpch5_1_old_duckdb.sql
+clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf10.duckdb -f scripts/measure/tpch5_analysis.sql
+clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf50.duckdb -f scripts/measure/tpch5_analysis.sql
+clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf100.duckdb -f scripts/measure/tpch5_analysis.sql
 */
 
 -- https://duckdb.org/docs/stable/dev/profiling
@@ -63,27 +63,44 @@ load tpch;
 -- FROM per_order_lineitem_fanout;
 
 
+
+-- 1st big join: everything w/ lineitem on l_orderkey = o_orderkey
+-- 2nd big join: everything w/ supplier on c_nationkey = s_nationkey, l_suppkey = s_suppkey
+
+
+EXPLAIN ANALYZE 
+
+with BULK as (
+    SELECT n_name, o_orderkey, c_nationkey, 
+FROM
+    customer,
+    orders,
+    nation,
+    region
+
+WHERE
+    c_custkey = o_custkey
+    AND c_nationkey = n_nationkey
+    AND n_regionkey = r_regionkey
+    AND r_name = 'ASIA'
+    AND o_orderdate >= CAST('1994-01-01' AS date)
+    AND o_orderdate < CAST('1995-01-01' AS date)
+
+)
+
+
 -- EXPLAIN ANALYZE SELECT
 SELECT
     n_name,
     sum(l_extendedprice * (1 - l_discount)) AS revenue
 FROM
-    customer,
-    orders,
+    BULK,
     lineitem,
-    supplier,
-    nation,
-    region
+    supplier
 WHERE
-    c_custkey = o_custkey
-    AND l_orderkey = o_orderkey -- o_ is build side
+    l_orderkey = o_orderkey -- o_ is build side
+    AND c_nationkey = s_nationkey
     AND l_suppkey = s_suppkey
-    AND c_nationkey = s_nationkey -- actually being done
-    AND s_nationkey = n_nationkey -- being replaced by c_nationkey = n_nationkey. Actually making this change doesn't affect the result
-    AND n_regionkey = r_regionkey
-    AND r_name = 'ASIA'
-    AND o_orderdate >= CAST('1994-01-01' AS date)
-    AND o_orderdate < CAST('1995-01-01' AS date)
 GROUP BY
     n_name
 ORDER BY
