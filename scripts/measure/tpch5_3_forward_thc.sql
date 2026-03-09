@@ -1,11 +1,15 @@
 -- Can run with:
--- build/release/duckdb ../benchmark_data/tpch/tpch_sf100.duckdb -f scripts/measure/tpch5_forward_thc.sql
+-- build/release/duckdb ../benchmark_data/tpch/tpch_sf100.duckdb -f scripts/measure/tpch5_3_forward_thc.sql
 
 -- https://duckdb.org/docs/stable/dev/profiling
 PRAGMA enable_profiling = 'json';
 PRAGMA profiling_output = 'tpch5.json';
 PRAGMA profiling_coverage = 'SELECT';
 -- PRAGMA profiling_mode = 'detailed';
+
+-------- Case #3: RPT+ Forward + THC -------- 
+SET rpt_forward_only = true;
+---------------------------------------------
 
 SET threads = 4;
 SET pin_threads = 'on';
@@ -15,9 +19,6 @@ SET thc_collect_budget_fraction = 0.02;
 SET thc_miss_threshold = 0.05; 
 SET thc_activation_threshold = 500000;
 
--- Run RPT+ forward pass with our THC
-SET rpt_forward_only = true;
--- SET disable_tiered_hash_cache = true;
 
 load tpch;
 -- call dbgen(sf = 10);

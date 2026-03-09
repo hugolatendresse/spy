@@ -1,11 +1,16 @@
 -- Can run with:
--- build/release/duckdb ../benchmark_data/tpch/tpch_sf100.duckdb -f scripts/measure/tpch5_forward_backward.sql
+-- build/release/duckdb ../benchmark_data/tpch/tpch_sf100.duckdb -f scripts/measure/tpch5_2_forward_only.sql
 
 -- https://duckdb.org/docs/stable/dev/profiling
 PRAGMA enable_profiling = 'json';
 PRAGMA profiling_output = 'tpch5.json';
 PRAGMA profiling_coverage = 'SELECT';
 -- PRAGMA profiling_mode = 'detailed';
+
+-------- Case #2: RPT+ Forward Pass Only -------- 
+SET rpt_forward_only = true;
+SET disable_tiered_hash_cache = true;
+-------------------------------------------------
 
 SET threads = 4;
 SET pin_threads = 'on';
@@ -15,9 +20,6 @@ SET thc_collect_budget_fraction = 0.02;
 SET thc_miss_threshold = 0.05; 
 SET thc_activation_threshold = 500000;
 
--- Run RPT+ as-is (forward and backward)
--- SET rpt_forward_only = true;
-SET disable_tiered_hash_cache = true;
 
 load tpch;
 -- call dbgen(sf = 10);
