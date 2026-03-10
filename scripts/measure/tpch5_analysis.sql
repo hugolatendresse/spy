@@ -11,12 +11,25 @@ PRAGMA profiling_coverage = 'SELECT';
 -- PRAGMA profiling_mode = 'detailed';
 
 -------- Case #1: Old DuckDB --------------  
-SET disable_rpt = true;
-SET disable_tiered_hash_cache = true;
+-- SET disable_rpt = true;
+-- SET disable_tiered_hash_cache = true;
 ------------------------------------------
 
-SET threads = 4;
-SET pin_threads = 'on';
+
+-------- Case #2: RPT+ Forward Pass Only -------- 
+-- SET rpt_forward_only = true;
+-- SET disable_tiered_hash_cache = true;
+-------------------------------------------------
+
+
+-------- Case #3: RPT+ Forward + THC -------- 
+SET rpt_forward_only = true;
+---------------------------------------------
+
+
+-- SET threads = 1;
+SET threads = 16;
+-- SET pin_threads = 'on';
 SET thc_l3_budget = 4194304;
 SET thc_collect_phase_rows = 100000; 
 SET thc_collect_budget_fraction = 0.02; 
@@ -68,6 +81,30 @@ load tpch;
 -- 2nd big join: everything w/ supplier on c_nationkey = s_nationkey, l_suppkey = s_suppkey
 
 
+/*Check selectivity in merge of orders onto REST*/
+-- WITH REST AS (
+--     SELECT n_name, c_custkey, c_nationkey
+--     FROM customer, nation, region
+--     WHERE 
+--       c_nationkey = n_nationkey
+--       AND n_regionkey = r_regionkey
+--       AND r_name = 'ASIA'
+-- ),
+-- ORDERS2 AS (
+--     SELECT o_custkey 
+--     FROM orders
+--       WHERE o_orderdate >= DATE '1994-01-01'
+--       AND o_orderdate <  DATE '1995-01-01'
+-- )
+-- SELECT 
+--     COUNT(DISTINCT REST.c_custkey) AS total_rest_custkeys,
+--     COUNT(DISTINCT REST.c_custkey) FILTER (WHERE o.o_custkey IS NOT NULL) AS REST_with_orders,
+--     COUNT(DISTINCT REST.c_custkey) FILTER (WHERE o.o_custkey IS NULL)     AS REST_without_orders
+-- FROM REST
+-- LEFT JOIN orders2 o
+--   ON o.o_custkey = REST.c_custkey;
+-- RESULT: out of 1,499,409 rows in REST, 869,589 find a match in orders. That means each appears about 2.6 times in orders (output has 2,273,588 rows) 
+
 
 /*Check selectivity in merge of lineitem onto BULK*/
 -- WITH BULK AS (
@@ -90,6 +127,35 @@ load tpch;
 -- RESULT: all 2,273,588 build-side keys in BULK are hot!
 
 
+/*Check selectivity in merge of supplier onto PENULTIMATE*/
+-- WITH BULK AS (
+--     SELECT n_name, o_orderkey, c_nationkey
+--     FROM customer, orders, nation, region
+--     WHERE c_custkey = o_custkey
+--       AND c_nationkey = n_nationkey
+--       AND n_regionkey = r_regionkey
+--       AND r_name = 'ASIA'
+--       AND o_orderdate >= DATE '1994-01-01'
+--       AND o_orderdate <  DATE '1995-01-01'
+-- ),
+-- PENULTIMATE AS (
+--     SELECT n_name, c_nationkey, l_suppkey, l_extendedprice, l_discount
+--     FROM BULK, lineitem
+--     WHERE l_orderkey = o_orderkey
+-- )
+-- SELECT
+--     COUNT(*) AS total_supplier_rows,
+--     COUNT(*) FILTER (WHERE p.l_suppkey IS NOT NULL) AS supplier_rows_with_match,
+--     COUNT(*) FILTER (WHERE p.l_suppkey IS NULL) AS supplier_rows_without_match
+-- FROM supplier s
+-- LEFT JOIN (
+--     SELECT DISTINCT c_nationkey, l_suppkey
+--     FROM PENULTIMATE
+-- ) as p
+--   ON p.c_nationkey = s.s_nationkey
+--  AND p.l_suppkey   = s.s_suppkey;
+-- RESULT: Out of the 500k rows in supplier, only 97k occur in PENULTIMATE
+--         Since the result has 364k rows, each row is probed ~3.7 times
 
 
 /* 
