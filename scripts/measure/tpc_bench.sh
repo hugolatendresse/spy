@@ -360,8 +360,20 @@ for RUN_IDX in $(seq 1 "$RUNS"); do
 			if [[ -n "$TPCH_QUERY" ]]; then
 				OUTPUT_REDIRECT="/dev/stdout"
 			fi
-			if /usr/bin/time -f "%e" -o "$TIME_FILE" \
-				"$DUCKDB_BIN" "$TPCH_DB_PATH" -c "${EXTRA_SET} LOAD tpch; PRAGMA tpch(${Q});" > "$OUTPUT_REDIRECT" 2>"$ERROR_FILE"; then
+			# In debug mode, let stderr (including DEBUG_LOG) go to the console as well
+			QUERY_OK=0
+			if [[ "$BUILD_TARGET" == "debug" ]]; then
+				if /usr/bin/time -f "%e" -o "$TIME_FILE" \
+					"$DUCKDB_BIN" "$TPCH_DB_PATH" -c "${EXTRA_SET} LOAD tpch; PRAGMA tpch(${Q});" > "$OUTPUT_REDIRECT" 2> >(tee "$ERROR_FILE" >&2); then
+					QUERY_OK=1
+				fi
+			else
+				if /usr/bin/time -f "%e" -o "$TIME_FILE" \
+					"$DUCKDB_BIN" "$TPCH_DB_PATH" -c "${EXTRA_SET} LOAD tpch; PRAGMA tpch(${Q});" > "$OUTPUT_REDIRECT" 2>"$ERROR_FILE"; then
+					QUERY_OK=1
+				fi
+			fi
+			if [[ $QUERY_OK -eq 1 ]]; then
 				RUNTIME=$(cat "$TIME_FILE")
 			else
 				EXIT_CODE=$?
@@ -404,8 +416,20 @@ for RUN_IDX in $(seq 1 "$RUNS"); do
 			echo "Running TPC-DS query ${Q}..."
 			TIME_FILE=$(mktemp)
 			ERROR_FILE=$(mktemp)
-			if /usr/bin/time -f "%e" -o "$TIME_FILE" \
-				"$DUCKDB_BIN" "$TPCDS_DB_PATH" -c "${EXTRA_SET} LOAD tpcds; PRAGMA tpcds(${Q});" > /dev/null 2>"$ERROR_FILE"; then
+			# In debug mode, let stderr (including DEBUG_LOG) go to the console as well
+			QUERY_OK=0
+			if [[ "$BUILD_TARGET" == "debug" ]]; then
+				if /usr/bin/time -f "%e" -o "$TIME_FILE" \
+					"$DUCKDB_BIN" "$TPCDS_DB_PATH" -c "${EXTRA_SET} LOAD tpcds; PRAGMA tpcds(${Q});" > /dev/null 2> >(tee "$ERROR_FILE" >&2); then
+					QUERY_OK=1
+				fi
+			else
+				if /usr/bin/time -f "%e" -o "$TIME_FILE" \
+					"$DUCKDB_BIN" "$TPCDS_DB_PATH" -c "${EXTRA_SET} LOAD tpcds; PRAGMA tpcds(${Q});" > /dev/null 2>"$ERROR_FILE"; then
+					QUERY_OK=1
+				fi
+			fi
+			if [[ $QUERY_OK -eq 1 ]]; then
 				RUNTIME=$(cat "$TIME_FILE")
 			else
 				EXIT_CODE=$?
