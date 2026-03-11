@@ -11,8 +11,8 @@ PRAGMA profiling_coverage = 'SELECT';
 -- PRAGMA profiling_mode = 'detailed';
 
 -------- Case #1: Old DuckDB --------------  
--- SET disable_rpt = true;
--- SET disable_tiered_hash_cache = true;
+SET disable_rpt = true;
+SET disable_tiered_hash_cache = true;
 ------------------------------------------
 
 
@@ -23,14 +23,14 @@ PRAGMA profiling_coverage = 'SELECT';
 
 
 -------- Case #3: RPT+ Forward + THC -------- 
-SET rpt_forward_only = true;
+-- SET rpt_forward_only = true;
 ---------------------------------------------
 
-
 -- SET threads = 1;
-SET threads = 16;
--- SET pin_threads = 'on';
-SET thc_l3_budget = 4194304;
+SET threads = 60;
+SET pin_threads = 'on';
+-- SET thc_l3_budget= 4194304;
+SET thc_l3_budget = 31457280; --30 MiB
 SET thc_collect_phase_rows = 100000; 
 SET thc_collect_budget_fraction = 0.02; 
 SET thc_miss_threshold = 0.05; 
@@ -82,27 +82,27 @@ load tpch;
 
 
 /*Check selectivity in merge of orders onto REST*/
--- WITH REST AS (
---     SELECT n_name, c_custkey, c_nationkey
---     FROM customer, nation, region
---     WHERE 
---       c_nationkey = n_nationkey
---       AND n_regionkey = r_regionkey
---       AND r_name = 'ASIA'
--- ),
--- ORDERS2 AS (
---     SELECT o_custkey 
---     FROM orders
---       WHERE o_orderdate >= DATE '1994-01-01'
---       AND o_orderdate <  DATE '1995-01-01'
--- )
--- SELECT 
---     COUNT(DISTINCT REST.c_custkey) AS total_rest_custkeys,
---     COUNT(DISTINCT REST.c_custkey) FILTER (WHERE o.o_custkey IS NOT NULL) AS REST_with_orders,
---     COUNT(DISTINCT REST.c_custkey) FILTER (WHERE o.o_custkey IS NULL)     AS REST_without_orders
--- FROM REST
--- LEFT JOIN orders2 o
---   ON o.o_custkey = REST.c_custkey;
+WITH REST AS (
+    SELECT n_name, c_custkey, c_nationkey
+    FROM customer, nation, region
+    WHERE 
+      c_nationkey = n_nationkey
+      AND n_regionkey = r_regionkey
+      AND r_name = 'ASIA'
+),
+ORDERS2 AS (
+    SELECT o_custkey 
+    FROM orders
+      WHERE o_orderdate >= DATE '1994-01-01'
+      AND o_orderdate <  DATE '1995-01-01'
+)
+SELECT 
+    COUNT(DISTINCT REST.c_custkey) AS total_rest_custkeys,
+    COUNT(DISTINCT REST.c_custkey) FILTER (WHERE o.o_custkey IS NOT NULL) AS REST_with_orders,
+    COUNT(DISTINCT REST.c_custkey) FILTER (WHERE o.o_custkey IS NULL)     AS REST_without_orders
+FROM REST
+LEFT JOIN orders2 o
+  ON o.o_custkey = REST.c_custkey;
 -- RESULT: out of 1,499,409 rows in REST, 869,589 find a match in orders. That means each appears about 2.6 times in orders (output has 2,273,588 rows) 
 
 
@@ -163,50 +163,3 @@ load tpch;
 MAIN QUERY
 
 */
-
-
-EXPLAIN ANALYZE 
-
-with BULK as (
-    SELECT n_name, o_orderkey, c_nationkey, 
-FROM
-    customer,
-    orders,
-    nation,
-    region
-
-WHERE
-    c_custkey = o_custkey
-    AND c_nationkey = n_nationkey
-    AND n_regionkey = r_regionkey
-    AND r_name = 'ASIA'
-    AND o_orderdate >= CAST('1994-01-01' AS date)
-    AND o_orderdate < CAST('1995-01-01' AS date)
-
-),
-
-PENULTIMATE AS (
-
-SELECT n_name, c_nationkey, l_suppkey, l_extendedprice, l_discount
-FROM 
-  BULK,
-  lineitem
-WHERE
-    l_orderkey = o_orderkey -- o_ is build side
-
-)
-
--- EXPLAIN ANALYZE SELECT
-SELECT
-    n_name,
-    sum(l_extendedprice * (1 - l_discount)) AS revenue
-FROM
-    PENULTIMATE,
-    supplier
-WHERE
-    c_nationkey = s_nationkey
-    AND l_suppkey = s_suppkey
-GROUP BY
-    n_name
-ORDER BY
-    revenue DESC;
