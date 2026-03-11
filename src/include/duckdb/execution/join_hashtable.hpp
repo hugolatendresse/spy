@@ -486,15 +486,15 @@ private:
 	idx_t tiered_hash_cache_key_offset = 0;
 
 	// ---- Per-instance THC parameters (loaded from ClientConfig at construction) ----
-	//! Memory budget (bytes) for the THC. Controls ComputeCapacity.
-	idx_t thc_budget_bytes;
+	//! Memory budget (MiB) for the THC. Controls ComputeCapacity.
+	idx_t thc_budget_mib;
 	//! Number of probe rows per collect phase before flushing to the THC.
 	idx_t thc_collect_phase_rows;
 	//! Maximum fraction of probe rows that can be spent in collect phases.
 	double thc_collect_budget_fraction;
 	//! Miss rate threshold for skipping collect phases.
 	double thc_miss_threshold;
-	//! Minimum HT capacity to activate the THC.
+	//! Minimum number of build-size rows to activate the THC.
 	idx_t thc_activation_threshold;
 
 	//! Copying not allowed

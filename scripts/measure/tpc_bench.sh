@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Default settings; can be overridden via flags.
-SF=100
+SF=20
 DUCKDB_BIN="./build/release/duckdb"
 GENERATE_DATA=0
 OUT_DIR="./tpch_results"
@@ -16,11 +16,11 @@ TPCH_QUERY=""
 RUNS=1
 BENCH_THREADS=4
 PIN_THREADS="on"
-THC_L3_BUDGET=4194304
+THC_L3_BUDGET=30  # 30MiB
 THC_COLLECT_PHASE_ROWS=100000
 THC_COLLECT_BUDGET_FRACTION=0.02
 THC_MISS_THRESHOLD=0.05
-THC_ACTIVATION_THRESHOLD=500000
+THC_ACTIVATION_THRESHOLD=750000
 
 # Track which options were explicitly passed
 PASSED_OPTIONS=()
@@ -30,7 +30,7 @@ usage() {
 Usage: scripts/measure/tpc_bench.sh [options]
 
 Options:
-	--sf <scale_factor>     Scale factor for dbgen (default: 100)
+	--sf <scale_factor>     Scale factor for dbgen (default: 20)
 	--db <db_base_path>     Base path for databases (default: ../benchmark_data)
 	--duckdb <bin_path>     DuckDB CLI binary (default: ./build/release/duckdb)
 	--generate              Generate TPC-H/TPC-DS data with dbgen (default assumes they already exist)
@@ -41,7 +41,7 @@ Options:
 	--runs <number>         Number of benchmark runs (default: 1)
 	--threads <number>      Value for SET threads (default: 4)
 	--pin-threads <mode>    Value for SET pin_threads (default: on)
-	--thc-l3-budget <num>   Value for SET thc_l3_budget (default: 4194304)
+	--thc-l3-budget <num>   Value for SET thc_l3_budget (default: 30)
 	--thc-collect-phase-rows <num>
 	                        Value for SET thc_collect_phase_rows (default: 100000)
 	--thc-collect-budget-fraction <num>

@@ -78,10 +78,10 @@ struct ClientConfig {
 	bool disable_rpt = false;
 	//! When true, skip initializing the tiered hash cache
 	bool disable_tiered_hash_cache = false;
-	//! Memory budget (in bytes) for the Tiered Hash Cache.
+	//! Memory budget (in MiB) for the Tiered Hash Cache.
 	//! Controls how much of L3 the THC is allowed to occupy.
-	//! Default: 22 MiB (sized for typical L3 caches).
-	idx_t thc_budget_bytes = 22ULL * 1024 * 1024;
+	//! Default: 30 MiB.
+	idx_t thc_budget_mib = 30;
 	//! Number of probe-side rows processed per THC collect phase.
 	//! Smaller values mean faster warm-up but more frequent collect/flush cycles.
 	idx_t thc_collect_phase_rows = 200000;
@@ -91,9 +91,9 @@ struct ClientConfig {
 	//! THC miss rate threshold (0.0–1.0). If the miss rate in a READ_ONLY
 	//! segment is below this, we skip the next collect phase.
 	double thc_miss_threshold = 0.10;
-	//! Minimum HT capacity (in entries) to activate the THC.
+	//! Minimum number of build-side rows to activate the THC.
 	//! Hash tables smaller than this are assumed to fit in L3 naturally.
-	idx_t thc_activation_threshold = 10ULL * 1024 * 1024 / sizeof(uint64_t);
+	idx_t thc_activation_threshold = 750000;
 	//! Enable caching operators
 	bool enable_caching_operators = true;
 	//! Force parallelism of small tables, used for testing

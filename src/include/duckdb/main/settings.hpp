@@ -589,7 +589,7 @@ struct DisableTieredHashCacheSetting {
 struct ThcL3BudgetSetting {
 	using RETURN_TYPE = int64_t;
 	static constexpr const char *Name = "thc_l3_budget";
-	static constexpr const char *Description = "Memory budget in bytes for the Tiered Hash Cache (default: 6 MiB)";
+	static constexpr const char *Description = "Memory budget in MiB for the Tiered Hash Cache (default: 30 MiB)";
 	static constexpr const char *InputType = "BIGINT";
 	static void SetLocal(ClientContext &context, const Value &parameter);
 	static void ResetLocal(ClientContext &context);
@@ -630,7 +630,7 @@ struct ThcMissThresholdSetting {
 struct ThcActivationThresholdSetting {
 	using RETURN_TYPE = int64_t;
 	static constexpr const char *Name = "thc_activation_threshold";
-	static constexpr const char *Description = "Minimum HT capacity (entries) to activate the THC (default: ~1.3M)";
+	static constexpr const char *Description = "Minimum build-side row count to activate the THC (default: 750k)";
 	static constexpr const char *InputType = "BIGINT";
 	static void SetLocal(ClientContext &context, const Value &parameter);
 	static void ResetLocal(ClientContext &context);

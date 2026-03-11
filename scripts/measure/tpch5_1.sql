@@ -1,7 +1,8 @@
 /* Can run with:
-clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf10.duckdb -f scripts/measure/tpch5_analysis.sql
-clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf50.duckdb -f scripts/measure/tpch5_analysis.sql
-clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf100.duckdb -f scripts/measure/tpch5_analysis.sql
+clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf10.duckdb -f scripts/measure/tpch5_1.sql
+clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf20.duckdb -f scripts/measure/tpch5_1.sql
+clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf50.duckdb -f scripts/measure/tpch5_1.sql
+clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf100.duckdb -f scripts/measure/tpch5_1.sql
 */
 
 -- https://duckdb.org/docs/stable/dev/profiling
