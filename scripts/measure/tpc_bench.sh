@@ -66,9 +66,6 @@ Examples:
 USAGE
 }
 
-# First we build
-GEN=ninja BUILD_BENCHMARK=1 BUILD_TPCH=1 BUILD_TPCDS=1 BUILD_HTTPFS=1 CORE_EXTENSIONS='tpch' make release -j $(nproc)
-
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		--sf)
@@ -200,6 +197,15 @@ case "$PIN_THREADS" in
 		exit 1
 		;;
 esac
+
+# Derive build target from DUCKDB_BIN
+if [[ "$DUCKDB_BIN" == *"debug"* ]]; then
+	BUILD_TARGET="debug"
+else
+	BUILD_TARGET="release"
+fi
+
+GEN=ninja BUILD_BENCHMARK=1 BUILD_TPCH=1 BUILD_TPCDS=1 BUILD_HTTPFS=1 CORE_EXTENSIONS='tpch' make "$BUILD_TARGET" -j $(nproc)
 
 if [[ -z "$DB_BASE_PATH" ]]; then
 	DB_BASE_PATH="../benchmark_data"
