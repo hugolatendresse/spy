@@ -16,7 +16,7 @@ TPCH_QUERY=""
 RUNS=1
 BENCH_THREADS=4
 PIN_THREADS="on"
-THC_L3_BUDGET=30  # 30MiB
+THC_SIZE_MIB=30  # 30MiB
 THC_COLLECT_PHASE_ROWS=100000
 THC_COLLECT_BUDGET_FRACTION=0.02
 THC_MISS_THRESHOLD=0.05
@@ -41,7 +41,7 @@ Options:
 	--runs <number>         Number of benchmark runs (default: 1)
 	--threads <number>      Value for SET threads (default: 4)
 	--pin-threads <mode>    Value for SET pin_threads (default: on)
-	--thc-l3-budget <num>   Value for SET thc_l3_budget (default: 30)
+	--thc-l3-budget <num>   Value for SET thc_size_mib (default: 30)
 	--thc-collect-phase-rows <num>
 	                        Value for SET thc_collect_phase_rows (default: 100000)
 	--thc-collect-budget-fraction <num>
@@ -128,7 +128,7 @@ while [[ $# -gt 0 ]]; do
 			shift 2
 			;;
 		--thc-l3-budget)
-			THC_L3_BUDGET="$2"
+			THC_SIZE_MIB="$2"
 			PASSED_OPTIONS+=("--thc-l3-budget $2")
 			shift 2
 			;;
@@ -205,7 +205,7 @@ else
 	BUILD_TARGET="release"
 fi
 
-GEN=ninja BUILD_BENCHMARK=1 BUILD_TPCH=1 BUILD_TPCDS=1 BUILD_HTTPFS=1 CORE_EXTENSIONS='tpch' make "$BUILD_TARGET" -j $(nproc)
+GEN=ninja BUILD_BENCHMARK=1 BUILD_TPCH=1 BUILD_TPCDS=1 BUILD_HTTPFS=1 CORE_EXTENSIONS='tpch' make "$BUILD_TARGET" -j "$BENCH_THREADS"
 
 if [[ -z "$DB_BASE_PATH" ]]; then
 	DB_BASE_PATH="../benchmark_data"
@@ -225,7 +225,7 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 # Build optional SET prefix
 # For reproducible benchmarks, always use four threads and pinned them 
-EXTRA_SET="SET threads = ${BENCH_THREADS}; SET pin_threads = '${PIN_THREADS}'; SET thc_l3_budget = ${THC_L3_BUDGET}; SET thc_collect_phase_rows = ${THC_COLLECT_PHASE_ROWS}; SET thc_collect_budget_fraction = ${THC_COLLECT_BUDGET_FRACTION}; SET thc_miss_threshold = ${THC_MISS_THRESHOLD}; SET thc_activation_threshold = ${THC_ACTIVATION_THRESHOLD};"
+EXTRA_SET="SET threads = ${BENCH_THREADS}; SET pin_threads = '${PIN_THREADS}'; SET thc_size_mib = ${THC_SIZE_MIB}; SET thc_collect_phase_rows = ${THC_COLLECT_PHASE_ROWS}; SET thc_collect_budget_fraction = ${THC_COLLECT_BUDGET_FRACTION}; SET thc_miss_threshold = ${THC_MISS_THRESHOLD}; SET thc_activation_threshold = ${THC_ACTIVATION_THRESHOLD};"
 if [[ $DISABLE_RPT -eq 1 ]]; then
 	EXTRA_SET="${EXTRA_SET} SET disable_rpt = true;"
 fi

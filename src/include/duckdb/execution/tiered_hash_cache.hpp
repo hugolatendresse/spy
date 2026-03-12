@@ -31,7 +31,7 @@ namespace duckdb {
 class TieredHashCache {
 public:
 	//! Memory budget for the cache (sized for L3)
-	static constexpr idx_t DEFAULT_L3_BUDGET = 22ULL * 1024 * 1024;
+	static constexpr idx_t DEFAULT_L3_BUDGET = 32ULL * 1024 * 1024;
 
 	//! Only create the THC if the global hash table has at least that capacity
 	static constexpr idx_t ACTIVATION_THRESHOLD = 10ULL * 1024 * 1024 / sizeof(uint64_t);
@@ -241,7 +241,7 @@ public:
 			return 64;
 		}
 		auto pot = NextPowerOfTwo(raw);
-		while (pot > l3_budget_bytes) {
+		while (pot > raw) {
 			pot >>= 1;
 		}
 		return pot;

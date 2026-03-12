@@ -569,18 +569,18 @@ Value DisableTieredHashCacheSetting::GetSetting(const ClientContext &context) {
 //===----------------------------------------------------------------------===//
 // THC L3 Budget
 //===----------------------------------------------------------------------===//
-void ThcL3BudgetSetting::SetLocal(ClientContext &context, const Value &input) {
+void ThcSizeSetting::SetLocal(ClientContext &context, const Value &input) {
 	auto &config = ClientConfig::GetConfig(context);
-	config.thc_budget_mib = static_cast<idx_t>(input.GetValue<int64_t>());
+	config.thc_size_mib = static_cast<idx_t>(input.GetValue<int64_t>());
 }
 
-void ThcL3BudgetSetting::ResetLocal(ClientContext &context) {
-	ClientConfig::GetConfig(context).thc_budget_mib = ClientConfig().thc_budget_mib;
+void ThcSizeSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).thc_size_mib = ClientConfig().thc_size_mib;
 }
 
-Value ThcL3BudgetSetting::GetSetting(const ClientContext &context) {
+Value ThcSizeSetting::GetSetting(const ClientContext &context) {
 	auto &config = ClientConfig::GetConfig(context);
-	return Value::BIGINT(static_cast<int64_t>(config.thc_budget_mib));
+	return Value::BIGINT(static_cast<int64_t>(config.thc_size_mib));
 }
 
 //===----------------------------------------------------------------------===//

@@ -487,7 +487,7 @@ private:
 
 	// ---- Per-instance THC parameters (loaded from ClientConfig at construction) ----
 	//! Memory budget (MiB) for the THC. Controls ComputeCapacity.
-	idx_t thc_budget_mib;
+	idx_t thc_size_mib;
 	//! Number of probe rows per collect phase before flushing to the THC.
 	idx_t thc_collect_phase_rows;
 	//! Maximum fraction of probe rows that can be spent in collect phases.

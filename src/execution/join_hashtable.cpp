@@ -45,7 +45,7 @@ JoinHashTable::JoinHashTable(ClientContext &context_p, const vector<JoinConditio
 	// These are per-session settings that control THC sizing and adaptive behaviour
 	// so that users can tune them via SQL SET commands without recompiling.
 	auto &config = ClientConfig::GetConfig(context);
-	thc_budget_mib = config.thc_budget_mib;
+	thc_size_mib = config.thc_size_mib;
 	thc_collect_phase_rows = config.thc_collect_phase_rows;
 	thc_collect_budget_fraction = config.thc_collect_budget_fraction;
 	thc_miss_threshold = config.thc_miss_threshold;
@@ -1425,7 +1425,7 @@ void JoinHashTable::InitializeTieredHashCache() {
 	    pointer_offset + sizeof(data_ptr_t);                    // TODO might be duplicative of logic in FashHashCache
 	const idx_t row_copy_offset = 0;                            // TODO hack?
 	tiered_hash_cache_key_offset = layout_ptr->GetOffsets()[0]; // key after validity bytes // TODO this is a hack!!!
-	const idx_t cache_capacity = TieredHashCache::ComputeCapacity(data_collection_row_size, thc_budget_mib);
+	const idx_t cache_capacity = TieredHashCache::ComputeCapacity(data_collection_row_size, thc_size_mib);
 
 	// ---------------------------------------------------------------
 	// Coverage ratio check: skip THC if it can only cache a tiny

@@ -110,7 +110,7 @@ static const ConfigurationOption internal_options[] = {
     DUCKDB_LOCAL(RptForwardOnlySetting),
     DUCKDB_LOCAL(DisableRptSetting),
 	DUCKDB_LOCAL(DisableTieredHashCacheSetting),
-	DUCKDB_LOCAL(ThcL3BudgetSetting),
+	DUCKDB_LOCAL(ThcSizeSetting),
 	DUCKDB_LOCAL(ThcCollectPhaseRowsSetting),
 	DUCKDB_LOCAL(ThcCollectBudgetFractionSetting),
 	DUCKDB_LOCAL(ThcMissThresholdSetting),
