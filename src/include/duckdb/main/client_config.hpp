@@ -93,7 +93,10 @@ struct ClientConfig {
 	double thc_miss_threshold = 0.10;
 	//! Minimum number of build-side rows to activate the THC.
 	//! Hash tables smaller than this are assumed to fit in L3 naturally.
-	idx_t thc_activation_threshold = 750000;
+	idx_t thc_min_build_side_row_cnt = 750000;
+	//! Maximum number of build-side rows to activate the THC.
+	//! Hash tables bigger than this are assumed to be too big for the L3 cache.
+	idx_t thc_max_build_side_row_cnt = 5000000;
 	//! Enable caching operators
 	bool enable_caching_operators = true;
 	//! Force parallelism of small tables, used for testing

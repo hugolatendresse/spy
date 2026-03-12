@@ -34,7 +34,7 @@ SET THC_SIZE_MIB = 32; --32 MiB
 SET thc_collect_phase_rows = 100000; 
 SET thc_collect_budget_fraction = 0.02; 
 SET thc_miss_threshold = 0.05; 
-SET thc_activation_threshold = 500000;
+SET thc_min_build_side_row_cnt = 500000;
 
 load tpch;
 -- call dbgen(sf = 10);

@@ -627,10 +627,19 @@ struct ThcMissThresholdSetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
-struct ThcActivationThresholdSetting {
+struct ThcMinBuildSideSetting {
 	using RETURN_TYPE = int64_t;
-	static constexpr const char *Name = "thc_activation_threshold";
+	static constexpr const char *Name = "thc_min_build_side_row_cnt";
 	static constexpr const char *Description = "Minimum build-side row count to activate the THC (default: 750k)";
+	static constexpr const char *InputType = "BIGINT";
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static void ResetLocal(ClientContext &context);
+	static Value GetSetting(const ClientContext &context);
+};
+struct ThcMaxBuildSideSetting {
+	using RETURN_TYPE = int64_t;
+	static constexpr const char *Name = "thc_max_build_side_row_cnt";
+	static constexpr const char *Description = "Maximum build-side row count to activate the THC (default: 5M)";
 	static constexpr const char *InputType = "BIGINT";
 	static void SetLocal(ClientContext &context, const Value &parameter);
 	static void ResetLocal(ClientContext &context);

@@ -495,7 +495,9 @@ private:
 	//! Miss rate threshold for skipping collect phases.
 	double thc_miss_threshold;
 	//! Minimum number of build-size rows to activate the THC.
-	idx_t thc_activation_threshold;
+	idx_t thc_min_build_side_row_cnt;
+	//! Maximum number of build-size rows to activate the THC.
+	idx_t thc_max_build_side_row_cnt;
 
 	//! Copying not allowed
 	JoinHashTable(const JoinHashTable &) = delete;

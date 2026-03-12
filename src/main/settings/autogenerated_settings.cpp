@@ -635,20 +635,37 @@ Value ThcMissThresholdSetting::GetSetting(const ClientContext &context) {
 }
 
 //===----------------------------------------------------------------------===//
-// THC Activation Threshold
+// THC Min Build Side Row Count
 //===----------------------------------------------------------------------===//
-void ThcActivationThresholdSetting::SetLocal(ClientContext &context, const Value &input) {
+void ThcMinBuildSideSetting::SetLocal(ClientContext &context, const Value &input) {
 	auto &config = ClientConfig::GetConfig(context);
-	config.thc_activation_threshold = static_cast<idx_t>(input.GetValue<int64_t>());
+	config.thc_min_build_side_row_cnt = static_cast<idx_t>(input.GetValue<int64_t>());
 }
 
-void ThcActivationThresholdSetting::ResetLocal(ClientContext &context) {
-	ClientConfig::GetConfig(context).thc_activation_threshold = ClientConfig().thc_activation_threshold;
+void ThcMinBuildSideSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).thc_min_build_side_row_cnt = ClientConfig().thc_min_build_side_row_cnt;
 }
 
-Value ThcActivationThresholdSetting::GetSetting(const ClientContext &context) {
+Value ThcMinBuildSideSetting::GetSetting(const ClientContext &context) {
 	auto &config = ClientConfig::GetConfig(context);
-	return Value::BIGINT(static_cast<int64_t>(config.thc_activation_threshold));
+	return Value::BIGINT(static_cast<int64_t>(config.thc_min_build_side_row_cnt));
+}
+
+//===----------------------------------------------------------------------===//
+// THC Max Build Side Row Count
+//===----------------------------------------------------------------------===//
+void ThcMaxBuildSideSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.thc_max_build_side_row_cnt = static_cast<idx_t>(input.GetValue<int64_t>());
+}
+
+void ThcMaxBuildSideSetting::ResetLocal(ClientContext &context) {
+	ClientConfig::GetConfig(context).thc_max_build_side_row_cnt = ClientConfig().thc_max_build_side_row_cnt;
+}
+
+Value ThcMaxBuildSideSetting::GetSetting(const ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::BIGINT(static_cast<int64_t>(config.thc_max_build_side_row_cnt));
 }
 
 //===----------------------------------------------------------------------===//

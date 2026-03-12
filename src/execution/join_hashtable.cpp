@@ -49,7 +49,8 @@ JoinHashTable::JoinHashTable(ClientContext &context_p, const vector<JoinConditio
 	thc_collect_phase_rows = config.thc_collect_phase_rows;
 	thc_collect_budget_fraction = config.thc_collect_budget_fraction;
 	thc_miss_threshold = config.thc_miss_threshold;
-	thc_activation_threshold = config.thc_activation_threshold;
+	thc_min_build_side_row_cnt = config.thc_min_build_side_row_cnt;
+	thc_max_build_side_row_cnt = config.thc_max_build_side_row_cnt;
 	for (idx_t i = 0; i < conditions.size(); ++i) {
 		auto &condition = conditions[i];
 		D_ASSERT(condition.left->return_type == condition.right->return_type);
@@ -1397,11 +1398,20 @@ void JoinHashTable::InitializeTieredHashCache() {
 		return;
 	}
 
-	if (Count() <= thc_activation_threshold) {
+	auto build_side_row_count = Count();
+	if (build_side_row_count < thc_min_build_side_row_cnt) {
 		DEBUG_LOG("[JoinHashTable::InitializeTieredHashCache] Not instantiating THC since row count of %lu does not "
-		          "meet thc_activation_threshold of %lu\n",
-		          (unsigned long)Count(), (unsigned long)thc_activation_threshold);
+		          "meet thc_min_build_side_row_cnt of %lu\n",
+		          (unsigned long)build_side_row_count, (unsigned long)thc_min_build_side_row_cnt);
 		return;
+	} else if (build_side_row_count > thc_max_build_side_row_cnt) {
+		DEBUG_LOG("[JoinHashTable::InitializeTieredHashCache] Not instantiating THC since row count of %lu does not "
+		          "meet thc_max_build_side_row_cnt of %lu\n",
+		          (unsigned long)build_side_row_count, (unsigned long)thc_max_build_side_row_cnt);
+		return;
+	} else {
+		DEBUG_LOG("[JoinHashTable::InitializeTieredHashCache] Build side row count is %lu",
+		          (unsigned long)build_side_row_count, (unsigned long)thc_min_build_side_row_cnt);
 	}
 
 	// Only activate for all-constant (fixed-size) equality key types

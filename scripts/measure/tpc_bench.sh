@@ -48,8 +48,8 @@ Options:
 	                        Value for SET thc_collect_budget_fraction (default: 0.02)
 	--thc-miss-threshold <num>
 	                        Value for SET thc_miss_threshold (default: 0.05)
-	--thc-activation-threshold <num>
-	                        Value for SET thc_activation_threshold (default: 500000)
+	--thc-min-build-side-row-cnt <num>
+	                        Value for SET thc_min_build_side_row_cnt (default: 500000)
 	--rpt-forward-only      Disable the RPT backward pass (do forward pass only)
 	--disable-rpt           Disable both the RPT forward and backward pass
 	--disable-thc           Disable the tiered hash cache
@@ -147,9 +147,9 @@ while [[ $# -gt 0 ]]; do
 			PASSED_OPTIONS+=("--thc-miss-threshold $2")
 			shift 2
 			;;
-		--thc-activation-threshold)
+		--thc-min-build-side-row-cnt)
 			THC_ACTIVATION_THRESHOLD="$2"
-			PASSED_OPTIONS+=("--thc-activation-threshold $2")
+			PASSED_OPTIONS+=("--thc-min-build-side-row-cnt $2")
 			shift 2
 			;;
 		--rpt-forward-only)
@@ -225,7 +225,7 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 # Build optional SET prefix
 # For reproducible benchmarks, always use four threads and pinned them 
-EXTRA_SET="SET threads = ${BENCH_THREADS}; SET pin_threads = '${PIN_THREADS}'; SET THC_SIZE_MIB = ${THC_SIZE_MIB}; SET thc_collect_phase_rows = ${THC_COLLECT_PHASE_ROWS}; SET thc_collect_budget_fraction = ${THC_COLLECT_BUDGET_FRACTION}; SET thc_miss_threshold = ${THC_MISS_THRESHOLD}; SET thc_activation_threshold = ${THC_ACTIVATION_THRESHOLD};"
+EXTRA_SET="SET threads = ${BENCH_THREADS}; SET pin_threads = '${PIN_THREADS}'; SET THC_SIZE_MIB = ${THC_SIZE_MIB}; SET thc_collect_phase_rows = ${THC_COLLECT_PHASE_ROWS}; SET thc_collect_budget_fraction = ${THC_COLLECT_BUDGET_FRACTION}; SET thc_miss_threshold = ${THC_MISS_THRESHOLD}; SET thc_min_build_side_row_cnt = ${THC_ACTIVATION_THRESHOLD};"
 if [[ $DISABLE_RPT -eq 1 ]]; then
 	EXTRA_SET="${EXTRA_SET} SET disable_rpt = true;"
 fi
