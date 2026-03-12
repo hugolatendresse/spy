@@ -9,7 +9,7 @@ PRAGMA profiling_coverage = 'SELECT';
 
 SET threads = 1;
 SET pin_threads = 'on';
-SET thc_size_mib = 4194304;
+SET THC_SIZE_MIB = 4194304;
 SET thc_collect_phase_rows = 100000;
 SET thc_collect_budget_fraction = 0.02;
 SET thc_miss_threshold = 0.05;
@@ -19,7 +19,7 @@ SET disable_tiered_hash_cache = 'false';
 
 SET threads = 4;
 SET pin_threads = 'on';
-SET thc_size_mib = 4194304;
+SET THC_SIZE_MIB = 4194304;
 SET thc_collect_phase_rows = 100000; 
 SET thc_collect_budget_fraction = 0.02; 
 SET thc_miss_threshold = 0.05; 

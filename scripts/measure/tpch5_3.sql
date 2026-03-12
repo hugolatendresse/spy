@@ -1,7 +1,8 @@
 /* Can run with:
-clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf10.duckdb -f scripts/measure/tpch5_analysis.sql
-clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf50.duckdb -f scripts/measure/tpch5_analysis.sql
-clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf100.duckdb -f scripts/measure/tpch5_analysis.sql
+clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf10.duckdb -f scripts/measure/tpch5_3.sql
+clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf50.duckdb -f scripts/measure/tpch5_3.sql
+clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf100.duckdb -f scripts/measure/tpch5_3.sql
+clear; build/release/duckdb ../benchmark_data/tpch/tpch_sf200.duckdb -f scripts/measure/tpch5_3.sql
 */
 
 -- https://duckdb.org/docs/stable/dev/profiling
@@ -29,8 +30,8 @@ SET rpt_forward_only = true;
 -- SET threads = 1;
 SET threads = 64;
 SET pin_threads = 'on';
--- SET thc_size_mib= 4194304;
-SET thc_size_mib = 33554432; --32 MiB
+-- SET THC_SIZE_MIB= 4194304;
+SET THC_SIZE_MIB = 32; --32 MiB
 SET thc_collect_phase_rows = 100000; 
 SET thc_collect_budget_fraction = 0.02; 
 SET thc_miss_threshold = 0.05; 

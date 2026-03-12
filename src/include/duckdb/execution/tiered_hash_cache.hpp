@@ -231,7 +231,7 @@ public:
 		return row_size;
 	}
 
-	//! Largest power-of-2 capacity that fits within the budget.
+	//! Largest power-of-2 capacity (i.e. *row count*) that fits within the budget.
 	//! Returns the number of entries we can have in the THC
 	static idx_t ComputeCapacity(idx_t row_size, idx_t thc_size_mib = DEFAULT_L3_BUDGET) {
 		auto stride = ComputeEntryStride(row_size);

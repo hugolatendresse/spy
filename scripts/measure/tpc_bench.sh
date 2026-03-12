@@ -41,7 +41,7 @@ Options:
 	--runs <number>         Number of benchmark runs (default: 1)
 	--threads <number>      Value for SET threads (default: 4)
 	--pin-threads <mode>    Value for SET pin_threads (default: on)
-	--thc-l3-budget <num>   Value for SET thc_size_mib (default: 30)
+	--thc-l3-budget <num>   Value for SET THC_SIZE_MIB (default: 32)
 	--thc-collect-phase-rows <num>
 	                        Value for SET thc_collect_phase_rows (default: 100000)
 	--thc-collect-budget-fraction <num>
@@ -225,7 +225,7 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 # Build optional SET prefix
 # For reproducible benchmarks, always use four threads and pinned them 
-EXTRA_SET="SET threads = ${BENCH_THREADS}; SET pin_threads = '${PIN_THREADS}'; SET thc_size_mib = ${THC_SIZE_MIB}; SET thc_collect_phase_rows = ${THC_COLLECT_PHASE_ROWS}; SET thc_collect_budget_fraction = ${THC_COLLECT_BUDGET_FRACTION}; SET thc_miss_threshold = ${THC_MISS_THRESHOLD}; SET thc_activation_threshold = ${THC_ACTIVATION_THRESHOLD};"
+EXTRA_SET="SET threads = ${BENCH_THREADS}; SET pin_threads = '${PIN_THREADS}'; SET THC_SIZE_MIB = ${THC_SIZE_MIB}; SET thc_collect_phase_rows = ${THC_COLLECT_PHASE_ROWS}; SET thc_collect_budget_fraction = ${THC_COLLECT_BUDGET_FRACTION}; SET thc_miss_threshold = ${THC_MISS_THRESHOLD}; SET thc_activation_threshold = ${THC_ACTIVATION_THRESHOLD};"
 if [[ $DISABLE_RPT -eq 1 ]]; then
 	EXTRA_SET="${EXTRA_SET} SET disable_rpt = true;"
 fi
