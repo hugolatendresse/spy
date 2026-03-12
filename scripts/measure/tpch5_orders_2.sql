@@ -27,10 +27,10 @@ SET rpt_forward_only = true;
 ---------------------------------------------
 
 -- SET threads = 1;
-SET threads = 60;
+SET threads = 64;
 SET pin_threads = 'on';
 -- SET thc_size_mib= 4194304;
-SET thc_size_mib = 33554432; --30 MiB
+SET thc_size_mib = 33554432; --32 MiB
 SET thc_collect_phase_rows = 100000; 
 SET thc_collect_budget_fraction = 0.02; 
 SET thc_miss_threshold = 0.05; 

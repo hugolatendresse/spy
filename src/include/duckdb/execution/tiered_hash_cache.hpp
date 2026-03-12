@@ -233,18 +233,18 @@ public:
 
 	//! Largest power-of-2 capacity that fits within the budget.
 	//! Returns the number of entries we can have in the THC
-	static idx_t ComputeCapacity(idx_t row_size, idx_t l3_budget_mib = DEFAULT_L3_BUDGET) {
+	static idx_t ComputeCapacity(idx_t row_size, idx_t thc_size_mib = DEFAULT_L3_BUDGET) {
 		auto stride = ComputeEntryStride(row_size);
-		idx_t l3_budget_bytes = l3_budget_mib * 1024 * 1024;
-		auto raw = l3_budget_bytes / stride;
-		if (raw < 64) {
+		idx_t thc_size_bytes = thc_size_mib * 1024 * 1024;
+		auto raw_count = thc_size_bytes / stride;
+		if (raw_count < 64) {
 			return 64;
 		}
-		auto pot = NextPowerOfTwo(raw);
-		while (pot > raw) {
-			pot >>= 1;
+		auto pot_count = NextPowerOfTwo(raw_count);
+		while (pot_count > raw_count) {
+			pot_count >>= 1;
 		}
-		return pot;
+		return pot_count;
 	}
 
 private:
