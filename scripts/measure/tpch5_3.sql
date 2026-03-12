@@ -32,9 +32,9 @@ SET threads = 64;
 SET pin_threads = 'on';
 -- SET THC_SIZE_MIB= 4194304;
 SET THC_SIZE_MIB = 32; --32 MiB
-SET thc_collect_phase_rows = 100000; 
-SET thc_collect_budget_fraction = 0.02; 
-SET thc_miss_threshold = 0.05; 
+SET thc_collect_phase_rows = 1000000; 
+SET thc_collect_budget_fraction = 1.00; 
+SET thc_miss_threshold = 0.00; 
 SET thc_min_build_side_row_cnt = 500000;
 
 
