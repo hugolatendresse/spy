@@ -863,7 +863,8 @@ void JoinHashTable::GetRowPointers(DataChunk &keys, TupleDataChunkState &key_sta
 			state.tiered_hash_cache_phase = TieredHashCachePhase::READ_ONLY;
 			// The first READ_ONLY segment length equals the collect phase size.
 			// Each subsequent segment doubles (exponential backoff).
-			state.read_only_rows_target = thc_collect_phase_rows * (idx_t(1) << state.checkpoint_count);
+			// TODO hard-coded zero!!! Should be length of 
+			state.read_only_rows_target = 0 * (idx_t(1) << state.checkpoint_count);
 			state.read_only_rows_processed = 0;
 			state.ro_miss_count = 0;
 			state.ro_total_count = 0;
